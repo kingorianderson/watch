@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     customEmail?: string,
     customName?: string,
     customAvatar?: string,
-    googleSubId?: string
+    _googleSubId?: string
   ): Promise<User> => {
     const email = (customEmail || 'alex.streamer@gmail.com').toLowerCase().trim();
     const name = customName || email.split('@')[0];
@@ -63,13 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       customAvatar ||
       `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
 
-    // Deterministic ID: identical across any device logging into this account
-    const userId = googleSubId
-      ? `google_${googleSubId}`
-      : `google_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
-
+    // Email is the global unique ID across all devices
     const newUser: User = {
-      id: userId,
+      id: email,
       name,
       email,
       avatar,
@@ -83,10 +79,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithFacebook = async (customEmail?: string, customName?: string): Promise<User> => {
-    const email = customEmail || 'jordan.moviebuff@facebook.com';
+    const email = (customEmail || 'jordan.moviebuff@facebook.com').toLowerCase().trim();
     const name = customName || 'Jordan Smith';
     const newUser: User = {
-      id: `fb_${Date.now()}`,
+      id: email,
       name,
       email,
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}&backgroundColor=ffd5dc,ffdfbf`,
@@ -100,11 +96,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithEmail = async (email: string, name: string): Promise<User> => {
-    const formattedName = name.trim() || email.split('@')[0];
+    const formattedEmail = email.toLowerCase().trim();
+    const formattedName = name.trim() || formattedEmail.split('@')[0];
     const newUser: User = {
-      id: `email_${Date.now()}`,
+      id: formattedEmail,
       name: formattedName,
-      email: email.trim(),
+      email: formattedEmail,
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(formattedName)}&backgroundColor=d1d4f9`,
       provider: 'email',
       joinedAt: Date.now(),

@@ -21,7 +21,7 @@ export const cloudWatchlistService = {
       const { data, error } = await supabase
         .from('watchlist')
         .select('*')
-        .eq('user_id', userId)
+        .or(`user_id.eq."${userId}",user_id.eq."google_${userId}",user_id.like."%${userId}%"`)
         .order('added_at', { ascending: false });
 
       if (error) {
@@ -104,7 +104,7 @@ export const cloudHistoryService = {
       const { data, error } = await supabase
         .from('watch_history')
         .select('*')
-        .eq('user_id', userId)
+        .or(`user_id.eq."${userId}",user_id.eq."google_${userId}",user_id.like."%${userId}%"`)
         .order('timestamp', { ascending: false })
         .limit(50);
 
