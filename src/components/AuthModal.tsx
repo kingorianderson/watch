@@ -46,7 +46,7 @@ export default function AuthModal() {
                 const payload = parseJwt(response.credential);
                 if (payload) {
                   setLoading(true);
-                  loginWithGoogle(payload.email, payload.name, payload.picture);
+                  loginWithGoogle(payload.email, payload.name, payload.picture, payload.sub);
                   setLoading(false);
                 }
               }

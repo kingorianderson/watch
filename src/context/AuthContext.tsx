@@ -9,7 +9,7 @@ interface AuthContextType {
   openAuthModal: () => void;
   closeAuthModal: () => void;
   setUserProfile: (user: User) => void;
-  loginWithGoogle: (customEmail?: string, customName?: string, customAvatar?: string) => Promise<User>;
+  loginWithGoogle: (customEmail?: string, customName?: string, customAvatar?: string, googleSubId?: string) => Promise<User>;
   loginWithFacebook: (customEmail?: string, customName?: string) => Promise<User>;
   loginWithEmail: (email: string, name: string) => Promise<User>;
   logout: () => void;
@@ -51,12 +51,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     closeAuthModal();
   };
 
-  const loginWithGoogle = async (customEmail?: string, customName?: string, customAvatar?: string): Promise<User> => {
-    const email = customEmail || 'alex.streamer@gmail.com';
-    const name = customName || 'Alex Johnson';
-    const avatar = customAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+  const loginWithGoogle = async (
+    customEmail?: string,
+    customName?: string,
+    customAvatar?: string,
+    googleSubId?: string
+  ): Promise<User> => {
+    const email = (customEmail || 'alex.streamer@gmail.com').toLowerCase().trim();
+    const name = customName || email.split('@')[0];
+    const avatar =
+      customAvatar ||
+      `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+
+    // Deterministic ID: identical across any device logging into this account
+    const userId = googleSubId
+      ? `google_${googleSubId}`
+      : `google_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
     const newUser: User = {
-      id: `google_${Date.now()}`,
+      id: userId,
       name,
       email,
       avatar,
