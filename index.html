@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#09090b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="WATCHD" />
+    <meta name="application-name" content="WATCHD" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>WATCHD - Stream Movies & Series Online in HD</title>
+    
+    <!-- Primary Meta & SEO Tags -->
+    <meta name="title" content="WATCHD - Stream Movies & TV Series Online in HD" />
+    <meta name="description" content="Watch thousands of trending movies and TV series in HD with instant streaming, no subscription required." />
+    <meta name="keywords" content="watch movies online, free streaming, hd series, watchhd, watchd, stream movies free" />
+
+    <!-- Open Graph / Facebook / WhatsApp Social Previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://watch.kingori.co.ke/" />
+    <meta property="og:site_name" content="WATCHD" />
+    <meta property="og:title" content="WATCHD - Stream Movies & TV Series Online in HD" />
+    <meta property="og:description" content="Stream thousands of trending movies and TV series in HD with instant playback and subtitles." />
+    <meta property="og:image" content="https://watch.kingori.co.ke/favicon.svg" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://watch.kingori.co.ke/" />
+    <meta name="twitter:title" content="WATCHD - Stream Movies & TV Series Online in HD" />
+    <meta name="twitter:description" content="Stream thousands of trending movies and TV series in HD with instant playback and subtitles." />
+    <meta name="twitter:image" content="https://watch.kingori.co.ke/favicon.svg" />
+    <!-- Official Google Identity Services SDK for Browser Auto-Account Detection & One-Tap -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.log('SW registration error:', err);
+          });
+        });
+      }
+    </script>
+  </head>
+  <body class="bg-zinc-950 text-white min-h-screen">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

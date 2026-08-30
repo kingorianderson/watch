@@ -1,0 +1,7 @@
+# WATCHD robots.txt
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: https://watch.kingori.co.ke/sitemap.xml
+

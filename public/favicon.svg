@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Brand Gradient: from-red-600 via-red-500 to-amber-500 -->
+    <linearGradient id="brandGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#dc2626" />
+      <stop offset="50%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+
+    <!-- Subtle Top Sheen -->
+    <linearGradient id="topSheen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Full Bleed 100% Background Fill -->
+  <rect width="512" height="512" fill="url(#brandGrad)" />
+  <rect width="512" height="256" fill="url(#topSheen)" />
+
+  <!-- Clean, Iconic Play Triangle (Optically Centered with Smooth Rounded Corners) -->
+  <polygon 
+    points="186,145 366,256 186,367" 
+    fill="#ffffff" 
+    stroke="#ffffff" 
+    stroke-width="32" 
+    stroke-linejoin="round" 
+    stroke-linecap="round"
+  />
+</svg>

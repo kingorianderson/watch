@@ -1,0 +1,26 @@
+{
+  "name": "WATCHD - Stream Movies & TV Shows",
+  "short_name": "WATCHD",
+  "description": "Stream thousands of movies and TV series in HD with instant sync.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "portrait-primary",
+  "categories": ["entertainment", "movies", "tv", "video"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
