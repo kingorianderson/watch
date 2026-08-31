@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@paystack/inline-js": "^2.24.0",
     "@supabase/supabase-js": "^2.112.4",
     "axios": "^1.8.1",
     "clsx": "^2.1.1",

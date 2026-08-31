@@ -43,6 +43,7 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID || '1036162123114-b5ujr9g79e4qat72dusn37qr3t7037aj.apps.googleusercontent.com' }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://fjmgxmspjprnumprsonq.supabase.co' }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'sb_publishable_HSmXxXcp7LzvMSULdERB4g_aQdlKF4D' }}
+          VITE_PAYSTACK_PUBLIC_KEY: ${{ secrets.VITE_PAYSTACK_PUBLIC_KEY || 'pk_live_da3ed2fbbd176b1af5135e26941bf9cbfdad637a' }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

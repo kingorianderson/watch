@@ -35,7 +35,7 @@ export default function App() {
                 {/* Social Auth Modal (Google, Facebook, Email) */}
                 <AuthModal />
 
-                {/* Support & Crypto/Fiat Tips Modal */}
+                {/* Live M-Pesa & Card Support / Tip Modal */}
                 <SupportModal />
 
                 {/* Smart Mobile PWA Install App Prompt Banner */}
