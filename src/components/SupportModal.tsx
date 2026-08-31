@@ -84,7 +84,7 @@ export default function SupportModal() {
         email: emailToUse,
         amount: Math.round(currentAmount * 100), // In KES cents (subunits)
         currency: 'KES',
-        channels: ['mobile_money', 'card', 'apple_pay', 'bank'],
+        channels: ['card', 'mobile_money', 'apple_pay'],
         metadata: {
           custom_fields: [
             {
@@ -272,12 +272,11 @@ export default function SupportModal() {
                           KES
                         </span>
                         <input
-                          type="number"
-                          min="50"
-                          step="10"
+                          type="text"
+                          inputMode="numeric"
                           placeholder="e.g. 1500"
                           value={customAmount}
-                          onChange={(e) => setCustomAmount(e.target.value)}
+                          onChange={(e) => setCustomAmount(e.target.value.replace(/[^0-9]/g, ''))}
                           className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-12 pr-3 py-1.5 text-sm text-white focus:outline-none focus:border-red-500 font-mono"
                         />
                       </div>
@@ -298,15 +297,15 @@ export default function SupportModal() {
                 </button>
 
                 {/* Payment Channels Badges */}
-                <div className="flex items-center justify-center gap-3 text-[11px] text-zinc-400 pt-1">
+                <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-zinc-400 pt-1">
                   <span className="flex items-center gap-1">
                     <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>M-Pesa STK Push</span>
+                    <span>M-Pesa / Airtel Money</span>
                   </span>
                   <span>•</span>
                   <span className="flex items-center gap-1">
                     <CreditCard className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Visa / Mastercard</span>
+                    <span>Visa / Mastercard / Apple Pay</span>
                   </span>
                 </div>
               </form>
