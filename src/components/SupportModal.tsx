@@ -38,7 +38,6 @@ export default function SupportModal() {
   const [selectedAmount, setSelectedAmount] = useState<number>(500);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [isCustom, setIsCustom] = useState(false);
-  const [donorEmail, setDonorEmail] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [loadingPaystack, setLoadingPaystack] = useState(false);
@@ -51,7 +50,6 @@ export default function SupportModal() {
     const handleOpen = () => {
       setIsOpen(true);
       setPaymentSuccess(false);
-      if (user?.email) setDonorEmail(user.email);
     };
     const handleClose = () => setIsOpen(false);
 
@@ -75,11 +73,7 @@ export default function SupportModal() {
       return;
     }
 
-    const emailToUse = (donorEmail || user?.email || 'supporter@watch.kingori.co.ke').trim();
-    if (!emailToUse || !emailToUse.includes('@')) {
-      alert('Please provide a valid email to receive your donation receipt');
-      return;
-    }
+    const emailToUse = (user?.email || `supporter_${Date.now()}@watch.kingori.co.ke`).trim();
 
     setLoadingPaystack(true);
 
@@ -96,7 +90,7 @@ export default function SupportModal() {
             {
               display_name: 'Supporter Name',
               variable_name: 'supporter_name',
-              value: user?.name || donorEmail.split('@')[0] || 'Anonymous Fan',
+              value: user?.name || 'Anonymous Fan',
             },
             {
               display_name: 'Platform',
@@ -289,21 +283,6 @@ export default function SupportModal() {
                       </div>
                     )}
                   </div>
-                </div>
-
-                {/* Donor Email Field (for instant Paystack receipt) */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
-                    Receipt Email Address:
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="you@gmail.com"
-                    value={donorEmail || user?.email || ''}
-                    onChange={(e) => setDonorEmail(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-red-500"
-                  />
                 </div>
 
                 {/* Submit Checkout Button */}
