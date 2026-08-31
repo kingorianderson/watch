@@ -25,6 +25,8 @@ export function closeSupportModal() {
   window.dispatchEvent(new CustomEvent('close-support-modal'));
 }
 
+const KES_TO_USD_RATE = 130; // 1 USD ≈ 130 KES
+
 const KES_PRESETS = [
   { amount: 100, label: 'KES 100', subtitle: '☕ Coffee' },
   { amount: 250, label: 'KES 250', subtitle: '🍿 Movie Night' },
@@ -33,17 +35,17 @@ const KES_PRESETS = [
 ];
 
 const USD_PRESETS = [
-  { amount: 1, label: '$1 USD', subtitle: '☕ Coffee' },
-  { amount: 3, label: '$3 USD', subtitle: '🍿 Movie Night' },
-  { amount: 5, label: '$5 USD', subtitle: '⚡ Booster', popular: true },
-  { amount: 10, label: '$10 USD', subtitle: '👑 Super Fan' },
+  { amount: 1, label: '$1 USD', subtitle: '≈ KES 130 (Coffee)' },
+  { amount: 3, label: '$3 USD', subtitle: '≈ KES 390 (Movie)' },
+  { amount: 5, label: '$5 USD', subtitle: '≈ KES 650 (Booster)', popular: true },
+  { amount: 10, label: '$10 USD', subtitle: '≈ KES 1,300 (VIP)' },
 ];
 
 export default function SupportModal() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'paystack' | 'crypto'>('paystack');
-  const [currency, setCurrency] = useState<'KES' | 'USD'>('KES');
+  const [currencyMode, setCurrencyMode] = useState<'KES' | 'USD'>('KES');
   const [selectedAmount, setSelectedAmount] = useState<number>(500);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [isCustom, setIsCustom] = useState(false);
@@ -71,24 +73,27 @@ export default function SupportModal() {
     };
   }, []);
 
-  // When currency switches, reset default amounts
-  const handleCurrencyChange = (newCurr: 'KES' | 'USD') => {
-    setCurrency(newCurr);
+  const handleCurrencyChange = (mode: 'KES' | 'USD') => {
+    setCurrencyMode(mode);
     setIsCustom(false);
     setCustomAmount('');
-    setSelectedAmount(newCurr === 'KES' ? 500 : 5);
+    setSelectedAmount(mode === 'KES' ? 500 : 5);
   };
 
   if (!isOpen) return null;
 
   const currentAmount = isCustom ? Number(customAmount) || 0 : selectedAmount;
-  const presets = currency === 'KES' ? KES_PRESETS : USD_PRESETS;
-  const minAmount = currency === 'KES' ? 50 : 1;
+  const presets = currencyMode === 'KES' ? KES_PRESETS : USD_PRESETS;
+  const minAmount = currencyMode === 'KES' ? 50 : 1;
+
+  // Paystack Kenya accounts process in KES. For USD inputs, convert to KES equivalent.
+  const chargeAmountInKES =
+    currencyMode === 'USD' ? Math.round(currentAmount * KES_TO_USD_RATE) : Math.round(currentAmount);
 
   const handlePaystackCheckout = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentAmount || currentAmount < minAmount) {
-      alert(`Please enter an amount of at least ${currency === 'KES' ? 'KES 50' : '$1'}`);
+      alert(`Please enter an amount of at least ${currencyMode === 'KES' ? 'KES 50' : '$1'}`);
       return;
     }
 
@@ -98,17 +103,27 @@ export default function SupportModal() {
 
     try {
       const paystack = new PaystackPop();
-      const transactionConfig: any = {
+      paystack.newTransaction({
         key: paystackKey,
         email: emailToUse,
-        amount: Math.round(currentAmount * 100), // In subunits (cents)
-        currency: currency,
+        amount: chargeAmountInKES * 100, // Amount in KES cents (subunits)
+        currency: 'KES',
         metadata: {
           custom_fields: [
             {
               display_name: 'Supporter Name',
               variable_name: 'supporter_name',
               value: user?.name || 'Anonymous Fan',
+            },
+            {
+              display_name: 'Currency Mode',
+              variable_name: 'currency_mode',
+              value: currencyMode,
+            },
+            {
+              display_name: 'Original Amount',
+              variable_name: 'original_amount',
+              value: `${currencyMode} ${currentAmount}`,
             },
             {
               display_name: 'Platform',
@@ -125,13 +140,7 @@ export default function SupportModal() {
         onCancel: () => {
           setLoadingPaystack(false);
         },
-      };
-
-      if (currency === 'USD') {
-        transactionConfig.channels = ['card', 'apple_pay'];
-      }
-
-      paystack.newTransaction(transactionConfig);
+      });
     } catch (err) {
       console.error('Failed to open Paystack popup:', err);
       setLoadingPaystack(false);
@@ -190,7 +199,11 @@ export default function SupportModal() {
             <div className="space-y-1.5">
               <h3 className="text-2xl font-black text-white">Thank You for Your Support! ❤️</h3>
               <p className="text-sm text-zinc-300 max-w-sm mx-auto">
-                Your payment of <span className="text-emerald-400 font-bold font-mono">{currency} {currentAmount}</span> was successful. You're helping keep WATCHD fast, free & buffer-free for everyone!
+                Your payment of{' '}
+                <span className="text-emerald-400 font-bold font-mono">
+                  {currencyMode === 'USD' ? `$${currentAmount} USD` : `KES ${currentAmount}`}
+                </span>{' '}
+                was successful. You're helping keep WATCHD fast, free & buffer-free for everyone!
               </p>
             </div>
             <button
@@ -227,7 +240,7 @@ export default function SupportModal() {
                 }`}
               >
                 <Smartphone className="w-4 h-4 text-emerald-400" />
-                <span>M-Pesa / Cards</span>
+                <span>M-Pesa &amp; Cards</span>
               </button>
               <button
                 type="button"
@@ -246,33 +259,33 @@ export default function SupportModal() {
             {/* Tab 1: Live Paystack (M-Pesa + Visa/Mastercard/Apple Pay) */}
             {activeTab === 'paystack' && (
               <form onSubmit={handlePaystackCheckout} className="space-y-4">
-                {/* Method / Currency Toggle */}
+                {/* Currency Mode Selector */}
                 <div className="flex items-center justify-between bg-zinc-950/80 p-1.5 rounded-xl border border-zinc-800/90 text-xs">
                   <span className="text-zinc-400 font-semibold px-2 flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-zinc-500" /> Payment Region:
+                    <Globe className="w-3.5 h-3.5 text-zinc-500" /> Currency / Region:
                   </span>
                   <div className="flex gap-1">
                     <button
                       type="button"
                       onClick={() => handleCurrencyChange('KES')}
                       className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                        currency === 'KES'
+                        currencyMode === 'KES'
                           ? 'bg-emerald-600 text-white shadow-sm'
                           : 'text-zinc-400 hover:text-white'
                       }`}
                     >
-                      🇰🇪 M-Pesa (KES)
+                      🇰🇪 KES (M-Pesa)
                     </button>
                     <button
                       type="button"
                       onClick={() => handleCurrencyChange('USD')}
                       className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                        currency === 'USD'
+                        currencyMode === 'USD'
                           ? 'bg-blue-600 text-white shadow-sm'
                           : 'text-zinc-400 hover:text-white'
                       }`}
                     >
-                      🌍 Card / Apple Pay (USD)
+                      🌍 USD (Global)
                     </button>
                   </div>
                 </div>
@@ -324,12 +337,12 @@ export default function SupportModal() {
                     {isCustom && (
                       <div className="flex-1 relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-zinc-500 font-bold">
-                          {currency}
+                          {currencyMode}
                         </span>
                         <input
                           type="text"
                           inputMode="numeric"
-                          placeholder={currency === 'KES' ? 'e.g. 1500' : 'e.g. 15'}
+                          placeholder={currencyMode === 'KES' ? 'e.g. 1500' : 'e.g. 15'}
                           value={customAmount}
                           onChange={(e) => setCustomAmount(e.target.value.replace(/[^0-9]/g, ''))}
                           className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-14 pr-3 py-1.5 text-sm text-white focus:outline-none focus:border-red-500 font-mono"
@@ -343,15 +356,11 @@ export default function SupportModal() {
                 <button
                   type="submit"
                   disabled={loadingPaystack || currentAmount <= 0}
-                  className={`w-full py-3 px-4 rounded-2xl text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg hover:scale-[1.01] active:scale-95 transition cursor-pointer disabled:opacity-50 ${
-                    currency === 'KES'
-                      ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 shadow-emerald-600/20'
-                      : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 shadow-blue-600/20'
-                  }`}
+                  className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 hover:scale-[1.01] active:scale-95 transition cursor-pointer disabled:opacity-50"
                 >
                   <Zap className="w-4 h-4 fill-white" />
                   <span>
-                    Pay {currency} {currentAmount || 0} via {currency === 'KES' ? 'M-Pesa / Airtel' : 'Card / Apple Pay'}
+                    Pay {currencyMode === 'USD' ? `$${currentAmount} USD` : `KES ${currentAmount}`} via M-Pesa / Card
                   </span>
                 </button>
 
@@ -364,7 +373,7 @@ export default function SupportModal() {
                   <span>•</span>
                   <span className="flex items-center gap-1">
                     <CreditCard className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Visa / Mastercard / Apple Pay</span>
+                    <span>Visa / Mastercard</span>
                   </span>
                 </div>
               </form>
