@@ -11,6 +11,8 @@ import {
   Wallet,
   Zap,
   CheckCircle2,
+  ExternalLink,
+  Coffee,
 } from 'lucide-react';
 // @ts-ignore
 import PaystackPop from '@paystack/inline-js';
@@ -26,15 +28,15 @@ export function closeSupportModal() {
 
 const PRESET_AMOUNTS = [
   { amount: 100, label: 'KES 100', subtitle: '☕ Coffee (~$1)' },
-  { amount: 250, label: 'KES 250', subtitle: '🍿 Movie Night (~$2)' },
-  { amount: 500, label: 'KES 500', subtitle: '⚡ Server Booster (~$4)', popular: true },
+  { amount: 250, label: 'KES 250', subtitle: '🍿 Movie (~$2)' },
+  { amount: 500, label: 'KES 500', subtitle: '⚡ Booster (~$4)', popular: true },
   { amount: 1000, label: 'KES 1,000', subtitle: '👑 Super Fan (~$8)' },
 ];
 
 export default function SupportModal() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'paystack' | 'crypto'>('paystack');
+  const [activeTab, setActiveTab] = useState<'mpesa' | 'card' | 'crypto'>('mpesa');
   const [selectedAmount, setSelectedAmount] = useState<number>(500);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [isCustom, setIsCustom] = useState(false);
@@ -42,6 +44,7 @@ export default function SupportModal() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [loadingPaystack, setLoadingPaystack] = useState(false);
 
+  const buyMeACoffeeUrl = 'https://buymeacoffee.com/andersonkings';
   const paystackKey =
     import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ||
     'pk_live_da3ed2fbbd176b1af5135e26941bf9cbfdad637a';
@@ -82,8 +85,8 @@ export default function SupportModal() {
       paystack.newTransaction({
         key: paystackKey,
         email: emailToUse,
-        amount: Math.round(currentAmount * 100), // In KES cents
-        currency: 'KES', // Strictly KES so Paystack Kenya always succeeds
+        amount: Math.round(currentAmount * 100),
+        currency: 'KES',
         metadata: {
           custom_fields: [
             {
@@ -146,7 +149,7 @@ export default function SupportModal() {
       <div className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden">
         {/* Background ambient glow */}
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-red-600/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-emerald-600/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-amber-600/15 rounded-full blur-3xl pointer-events-none" />
 
         {/* Close Button */}
         <button
@@ -186,40 +189,52 @@ export default function SupportModal() {
                 Support WATCH<span className="text-red-500 font-bold">HD</span>
               </h2>
               <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-                Help us keep servers fast, buffer-free & 100% free with no forced subscriptions.
+                Keep WATCHD 100% free with fast 4K streaming servers & no subscription paywalls!
               </p>
             </div>
 
-            {/* Tab Switcher */}
+            {/* Tab Switcher (3 clear options) */}
             <div className="flex bg-zinc-950 p-1 rounded-2xl border border-zinc-800/80 mb-5">
               <button
                 type="button"
-                onClick={() => setActiveTab('paystack')}
-                className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
-                  activeTab === 'paystack'
-                    ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30'
+                onClick={() => setActiveTab('mpesa')}
+                className={`flex-1 py-2 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  activeTab === 'mpesa'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/30'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <Smartphone className="w-4 h-4 text-emerald-400" />
-                <span>M-Pesa / Cards</span>
+                <Smartphone className="w-4 h-4" />
+                <span>M-Pesa</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('card')}
+                className={`flex-1 py-2 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  activeTab === 'card'
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-zinc-950 shadow-lg shadow-amber-500/30 font-extrabold'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>Card / Apple Pay</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('crypto')}
-                className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                className={`flex-1 py-2 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
                   activeTab === 'crypto'
                     ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
                 <Wallet className="w-4 h-4" />
-                <span>Crypto Tips</span>
+                <span>Crypto</span>
               </button>
             </div>
 
-            {/* Tab 1: Live Paystack Checkout */}
-            {activeTab === 'paystack' && (
+            {/* Tab 1: M-Pesa & Airtel Money STK Push */}
+            {activeTab === 'mpesa' && (
               <form onSubmit={handlePaystackCheckout} className="space-y-4">
                 {/* Preset Amount Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -235,12 +250,12 @@ export default function SupportModal() {
                         }}
                         className={`relative p-2.5 rounded-2xl border text-center transition cursor-pointer ${
                           isSelected
-                            ? 'bg-red-600/20 border-red-500 text-white shadow-md shadow-red-600/20'
+                            ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-md shadow-emerald-600/20'
                             : 'bg-zinc-950/60 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900'
                         }`}
                       >
                         {item.popular && (
-                          <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.2 bg-amber-500 text-zinc-950 font-bold text-[9px] rounded-full uppercase tracking-wider font-mono">
+                          <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.2 bg-emerald-500 text-zinc-950 font-bold text-[9px] rounded-full uppercase tracking-wider font-mono">
                             Popular
                           </span>
                         )}
@@ -259,7 +274,7 @@ export default function SupportModal() {
                       onClick={() => setIsCustom(!isCustom)}
                       className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition cursor-pointer ${
                         isCustom
-                          ? 'bg-red-600/20 border-red-500 text-red-300'
+                          ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
                           : 'bg-zinc-800/80 border-zinc-700 text-zinc-400 hover:text-white'
                       }`}
                     >
@@ -276,7 +291,7 @@ export default function SupportModal() {
                           placeholder="e.g. 1500"
                           value={customAmount}
                           onChange={(e) => setCustomAmount(e.target.value.replace(/[^0-9]/g, ''))}
-                          className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-12 pr-3 py-1.5 text-sm text-white focus:outline-none focus:border-red-500 font-mono"
+                          className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-12 pr-3 py-1.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
                         />
                       </div>
                     )}
@@ -291,31 +306,66 @@ export default function SupportModal() {
                 >
                   <Zap className="w-4 h-4 fill-white" />
                   <span>
-                    Pay KES {currentAmount || 0} via M-Pesa / Card
+                    Pay KES {currentAmount || 0} with M-Pesa STK Push
                   </span>
                 </button>
 
-                {/* Supported Methods Badges */}
-                <div className="flex flex-wrap items-center justify-center gap-2.5 text-[11px] text-zinc-400 pt-1">
-                  <span className="flex items-center gap-1">
-                    <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>M-Pesa STK</span>
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <Smartphone className="w-3.5 h-3.5 text-red-400" />
-                    <span>Airtel Money</span>
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <CreditCard className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Visa / Mastercard</span>
-                  </span>
+                <div className="text-center text-[11px] text-zinc-500">
+                  Instant prompt sent to your phone • Enter PIN to confirm
                 </div>
               </form>
             )}
 
-            {/* Tab 2: Crypto Addresses */}
+            {/* Tab 2: International Cards / Apple Pay / PayPal (Buy Me A Coffee) */}
+            {activeTab === 'card' && (
+              <div className="space-y-4 py-1">
+                <div className="bg-gradient-to-br from-amber-500/10 via-zinc-950 to-amber-500/5 border border-amber-500/30 rounded-2xl p-5 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
+                    <Coffee className="w-6 h-6 text-amber-400 fill-amber-400" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-base font-bold text-white">
+                      International Card &amp; Apple Pay Support
+                    </h4>
+                    <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+                      Support WATCHD securely from anywhere in the world using your Credit/Debit Card, Apple Pay, Google Pay, or PayPal.
+                    </p>
+                  </div>
+
+                  <a
+                    href={buyMeACoffeeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-zinc-950 font-black text-sm shadow-lg shadow-amber-500/30 hover:scale-[1.02] active:scale-95 transition cursor-pointer mt-2"
+                  >
+                    <Coffee className="w-4 h-4 text-zinc-950 fill-zinc-950" />
+                    <span>Pay with Card / Apple Pay / PayPal</span>
+                    <ExternalLink className="w-4 h-4 text-zinc-950" />
+                  </a>
+
+                  {/* Badges */}
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-2 text-[11px] text-zinc-400">
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono">
+                      Visa
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono">
+                      Mastercard
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono">
+                      Apple Pay
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono">
+                      Google Pay
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono">
+                      PayPal
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 3: Crypto Addresses */}
             {activeTab === 'crypto' && (
               <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
                 {cryptoAddresses.map((item, idx) => (
