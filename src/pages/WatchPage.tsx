@@ -12,6 +12,8 @@ import {
   Check,
   Copy,
   Sparkles,
+  Zap,
+  ExternalLink,
 } from 'lucide-react';
 import { tmdbService, getProfileUrl } from '../services/tmdb';
 import type { MediaItem, CastMember } from '../types/media';
@@ -172,6 +174,35 @@ export default function WatchPage() {
           episode={currentEpisode}
           title={title}
         />
+
+        {/* Pro Stream Booster & VPN Affiliate Card */}
+        <div className="bg-gradient-to-r from-zinc-900/90 via-zinc-900/60 to-zinc-900/90 border border-zinc-800/80 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-600/10 border border-red-500/20 text-red-400 flex items-center justify-center shrink-0">
+              <Zap className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                <span>Experiencing buffering or slow streams?</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-bold">
+                  Speed Boost
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5">
+                Protect your connection & unlock buffer-free 4K Ultra-HD streaming with a high-speed VPN.
+              </p>
+            </div>
+          </div>
+          <a
+            href={import.meta.env.VITE_VPN_AFFILIATE_URL || 'https://nordvpn.com'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-red-600/20 hover:scale-105 transition shrink-0 cursor-pointer"
+          >
+            <span>Get 70% Off VPN Deal</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
 
         {/* Quick Episode Navigation (for TV Series) */}
         {mediaType === 'tv' && (

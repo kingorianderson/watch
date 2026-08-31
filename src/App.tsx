@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Navbar from './components/Navbar';
 import AuthModal from './components/AuthModal';
 import AdTipBanner from './components/AdTipBanner';
+import SupportModal, { openSupportModal } from './components/SupportModal';
 import InstallAppPrompt from './components/InstallAppPrompt';
 import OfflineIndicator from './components/OfflineIndicator';
 import HomePage from './pages/HomePage';
@@ -33,6 +34,9 @@ export default function App() {
 
                 {/* Social Auth Modal (Google, Facebook, Email) */}
                 <AuthModal />
+
+                {/* Support & Crypto/Fiat Tips Modal */}
+                <SupportModal />
 
                 {/* Smart Mobile PWA Install App Prompt Banner */}
                 <InstallAppPrompt />
@@ -64,8 +68,15 @@ export default function App() {
                       <span>— Modern Movie &amp; Series Streaming Platform</span>
                     </div>
 
-                    {/* Legal & Compliance Links */}
-                    <div className="flex items-center gap-4 text-zinc-400">
+                    {/* Legal, Support & Compliance Links */}
+                    <div className="flex flex-wrap items-center justify-center gap-4 text-zinc-400">
+                      <button
+                        onClick={openSupportModal}
+                        className="text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 transition cursor-pointer"
+                      >
+                        <span>☕ Support Platform</span>
+                      </button>
+                      <span>•</span>
                       <Link to="/terms" className="hover:text-red-400 transition">
                         Terms of Service
                       </Link>

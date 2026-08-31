@@ -15,12 +15,14 @@ import {
   Loader2,
   Trash2,
   ArrowLeft,
+  Heart,
 } from 'lucide-react';
 import { tmdbService, getPosterUrl } from '../services/tmdb';
 import type { MediaItem } from '../types/media';
 import { useAuth } from '../context/AuthContext';
 import { useWatchlist } from '../hooks/useWatchlist';
 import UserProfileMenu from './UserProfileMenu';
+import { openSupportModal } from './SupportModal';
 
 const TRENDING_QUICK_SEARCHES = [
   'Spider-Man',
@@ -261,6 +263,16 @@ export default function Navbar() {
                   </Link>
                 );
               })}
+
+              {/* Desktop Support Button */}
+              <button
+                onClick={openSupportModal}
+                className="ml-2 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition hover:scale-105 flex items-center gap-1.5 cursor-pointer shrink-0"
+                title="Support WATCHD with a tip"
+              >
+                <Heart className="w-3.5 h-3.5 text-red-400 fill-red-400 animate-pulse" />
+                <span>Support</span>
+              </button>
             </div>
           </div>
 
@@ -508,6 +520,23 @@ export default function Navbar() {
                 </Link>
               );
             })}
+
+            {/* Mobile Drawer Support Button */}
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                openSupportModal();
+              }}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-amber-300 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition cursor-pointer mt-1"
+            >
+              <div className="flex items-center gap-3">
+                <Heart className="w-4 h-4 text-red-400 fill-red-400" />
+                <span>Support Platform</span>
+              </div>
+              <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full text-xs font-mono font-bold">
+                Tip ☕
+              </span>
+            </button>
           </div>
         )}
       </nav>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+﻿import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import type { User } from '../types/auth';
 
 interface AuthContextType {
@@ -63,7 +63,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       customAvatar ||
       `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
 
-    // Email is the global unique ID across all devices
     const newUser: User = {
       id: email,
       name,
