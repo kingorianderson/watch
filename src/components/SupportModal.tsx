@@ -11,7 +11,6 @@ import {
   Wallet,
   Zap,
   CheckCircle2,
-  Globe,
 } from 'lucide-react';
 // @ts-ignore
 import PaystackPop from '@paystack/inline-js';
@@ -25,27 +24,17 @@ export function closeSupportModal() {
   window.dispatchEvent(new CustomEvent('close-support-modal'));
 }
 
-const KES_TO_USD_RATE = 130; // 1 USD ≈ 130 KES
-
-const KES_PRESETS = [
-  { amount: 100, label: 'KES 100', subtitle: '☕ Coffee' },
-  { amount: 250, label: 'KES 250', subtitle: '🍿 Movie Night' },
-  { amount: 500, label: 'KES 500', subtitle: '⚡ Booster', popular: true },
-  { amount: 1000, label: 'KES 1,000', subtitle: '👑 Super Fan' },
-];
-
-const USD_PRESETS = [
-  { amount: 1, label: '$1 USD', subtitle: '≈ KES 130 (Coffee)' },
-  { amount: 3, label: '$3 USD', subtitle: '≈ KES 390 (Movie)' },
-  { amount: 5, label: '$5 USD', subtitle: '≈ KES 650 (Booster)', popular: true },
-  { amount: 10, label: '$10 USD', subtitle: '≈ KES 1,300 (VIP)' },
+const PRESET_AMOUNTS = [
+  { amount: 100, label: 'KES 100', subtitle: '☕ Coffee (~$1)' },
+  { amount: 250, label: 'KES 250', subtitle: '🍿 Movie (~$2)' },
+  { amount: 500, label: 'KES 500', subtitle: '⚡ Booster (~$4)', popular: true },
+  { amount: 1000, label: 'KES 1,000', subtitle: '👑 Super Fan (~$8)' },
 ];
 
 export default function SupportModal() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'paystack' | 'crypto'>('paystack');
-  const [currencyMode, setCurrencyMode] = useState<'KES' | 'USD'>('KES');
   const [selectedAmount, setSelectedAmount] = useState<number>(500);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [isCustom, setIsCustom] = useState(false);
@@ -73,27 +62,14 @@ export default function SupportModal() {
     };
   }, []);
 
-  const handleCurrencyChange = (mode: 'KES' | 'USD') => {
-    setCurrencyMode(mode);
-    setIsCustom(false);
-    setCustomAmount('');
-    setSelectedAmount(mode === 'KES' ? 500 : 5);
-  };
-
   if (!isOpen) return null;
 
   const currentAmount = isCustom ? Number(customAmount) || 0 : selectedAmount;
-  const presets = currencyMode === 'KES' ? KES_PRESETS : USD_PRESETS;
-  const minAmount = currencyMode === 'KES' ? 50 : 1;
-
-  // Paystack Kenya accounts process in KES. For USD inputs, convert to KES equivalent.
-  const chargeAmountInKES =
-    currencyMode === 'USD' ? Math.round(currentAmount * KES_TO_USD_RATE) : Math.round(currentAmount);
 
   const handlePaystackCheckout = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentAmount || currentAmount < minAmount) {
-      alert(`Please enter an amount of at least ${currencyMode === 'KES' ? 'KES 50' : '$1'}`);
+    if (!currentAmount || currentAmount < 50) {
+      alert('Please enter an amount of at least KES 50');
       return;
     }
 
@@ -106,24 +82,14 @@ export default function SupportModal() {
       paystack.newTransaction({
         key: paystackKey,
         email: emailToUse,
-        amount: chargeAmountInKES * 100, // Amount in KES cents (subunits)
+        amount: Math.round(currentAmount * 100), // In KES cents
         currency: 'KES',
         metadata: {
           custom_fields: [
             {
               display_name: 'Supporter Name',
               variable_name: 'supporter_name',
-              value: user?.name || 'Anonymous Fan',
-            },
-            {
-              display_name: 'Currency Mode',
-              variable_name: 'currency_mode',
-              value: currencyMode,
-            },
-            {
-              display_name: 'Original Amount',
-              variable_name: 'original_amount',
-              value: `${currencyMode} ${currentAmount}`,
+              value: user?.name || 'Anonymous Supporter',
             },
             {
               display_name: 'Platform',
@@ -199,11 +165,7 @@ export default function SupportModal() {
             <div className="space-y-1.5">
               <h3 className="text-2xl font-black text-white">Thank You for Your Support! ❤️</h3>
               <p className="text-sm text-zinc-300 max-w-sm mx-auto">
-                Your payment of{' '}
-                <span className="text-emerald-400 font-bold font-mono">
-                  {currencyMode === 'USD' ? `$${currentAmount} USD` : `KES ${currentAmount}`}
-                </span>{' '}
-                was successful. You're helping keep WATCHD fast, free & buffer-free for everyone!
+                Your payment of <span className="text-emerald-400 font-bold font-mono">KES {currentAmount}</span> was successful. You're helping keep WATCHD fast, free & buffer-free for everyone!
               </p>
             </div>
             <button
@@ -216,7 +178,7 @@ export default function SupportModal() {
         ) : (
           <>
             {/* Header */}
-            <div className="text-center space-y-2 mb-4">
+            <div className="text-center space-y-2 mb-5">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-red-600 to-amber-500 flex items-center justify-center mx-auto shadow-lg shadow-red-600/30">
                 <Heart className="w-6 h-6 text-white fill-white animate-pulse" />
               </div>
@@ -224,28 +186,28 @@ export default function SupportModal() {
                 Support WATCH<span className="text-red-500 font-bold">HD</span>
               </h2>
               <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-                Keep WATCHD 100% free with fast 4K servers & zero paywalls. Powered by secure M-Pesa & Card checkout.
+                Help us keep servers buffer-free & 100% free with fast 4K streaming.
               </p>
             </div>
 
             {/* Tab Switcher */}
-            <div className="flex bg-zinc-950 p-1 rounded-2xl border border-zinc-800/80 mb-4">
+            <div className="flex bg-zinc-950 p-1 rounded-2xl border border-zinc-800/80 mb-5">
               <button
                 type="button"
                 onClick={() => setActiveTab('paystack')}
-                className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
                   activeTab === 'paystack'
                     ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
                 <Smartphone className="w-4 h-4 text-emerald-400" />
-                <span>M-Pesa &amp; Cards</span>
+                <span>M-Pesa / Airtel / Card</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('crypto')}
-                className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
                   activeTab === 'crypto'
                     ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30'
                     : 'text-zinc-400 hover:text-zinc-200'
@@ -256,43 +218,12 @@ export default function SupportModal() {
               </button>
             </div>
 
-            {/* Tab 1: Live Paystack (M-Pesa + Visa/Mastercard/Apple Pay) */}
+            {/* Tab 1: All-in-One Paystack Checkout */}
             {activeTab === 'paystack' && (
               <form onSubmit={handlePaystackCheckout} className="space-y-4">
-                {/* Currency Mode Selector */}
-                <div className="flex items-center justify-between bg-zinc-950/80 p-1.5 rounded-xl border border-zinc-800/90 text-xs">
-                  <span className="text-zinc-400 font-semibold px-2 flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-zinc-500" /> Currency / Region:
-                  </span>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleCurrencyChange('KES')}
-                      className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                        currencyMode === 'KES'
-                          ? 'bg-emerald-600 text-white shadow-sm'
-                          : 'text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      🇰🇪 KES (M-Pesa)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleCurrencyChange('USD')}
-                      className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                        currencyMode === 'USD'
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      🌍 USD (Global)
-                    </button>
-                  </div>
-                </div>
-
                 {/* Preset Amount Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {presets.map((item) => {
+                  {PRESET_AMOUNTS.map((item) => {
                     const isSelected = !isCustom && selectedAmount === item.amount;
                     return (
                       <button
@@ -337,15 +268,15 @@ export default function SupportModal() {
                     {isCustom && (
                       <div className="flex-1 relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-zinc-500 font-bold">
-                          {currencyMode}
+                          KES
                         </span>
                         <input
                           type="text"
                           inputMode="numeric"
-                          placeholder={currencyMode === 'KES' ? 'e.g. 1500' : 'e.g. 15'}
+                          placeholder="e.g. 1500"
                           value={customAmount}
                           onChange={(e) => setCustomAmount(e.target.value.replace(/[^0-9]/g, ''))}
-                          className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-14 pr-3 py-1.5 text-sm text-white focus:outline-none focus:border-red-500 font-mono"
+                          className="w-full bg-zinc-950 border border-zinc-700 rounded-xl pl-12 pr-3 py-1.5 text-sm text-white focus:outline-none focus:border-red-500 font-mono"
                         />
                       </div>
                     )}
@@ -356,19 +287,24 @@ export default function SupportModal() {
                 <button
                   type="submit"
                   disabled={loadingPaystack || currentAmount <= 0}
-                  className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 hover:scale-[1.01] active:scale-95 transition cursor-pointer disabled:opacity-50"
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 hover:scale-[1.01] active:scale-95 transition cursor-pointer disabled:opacity-50"
                 >
                   <Zap className="w-4 h-4 fill-white" />
                   <span>
-                    Pay {currencyMode === 'USD' ? `$${currentAmount} USD` : `KES ${currentAmount}`} via M-Pesa / Card
+                    Pay KES {currentAmount || 0} via M-Pesa / Airtel / Card
                   </span>
                 </button>
 
-                {/* Payment Channels Badges */}
-                <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-zinc-400 pt-1">
+                {/* Supported Methods Badges */}
+                <div className="flex flex-wrap items-center justify-center gap-2.5 text-[11px] text-zinc-400 pt-1">
                   <span className="flex items-center gap-1">
                     <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>M-Pesa STK &amp; Airtel</span>
+                    <span>M-Pesa STK</span>
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1">
+                    <Smartphone className="w-3.5 h-3.5 text-red-400" />
+                    <span>Airtel Money</span>
                   </span>
                   <span>•</span>
                   <span className="flex items-center gap-1">
