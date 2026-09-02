@@ -44,6 +44,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://fjmgxmspjprnumprsonq.supabase.co' }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'sb_publishable_HSmXxXcp7LzvMSULdERB4g_aQdlKF4D' }}
           VITE_PAYSTACK_PUBLIC_KEY: ${{ secrets.VITE_PAYSTACK_PUBLIC_KEY || 'pk_live_da3ed2fbbd176b1af5135e26941bf9cbfdad637a' }}
+          VITE_VPN_AFFILIATE_URL: ${{ secrets.VITE_VPN_AFFILIATE_URL || 'https://www.profitableratecpmnetwork.com/tmu3is0wf5?key=21a1ec5aea498f026813fc3a521b1af3' }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

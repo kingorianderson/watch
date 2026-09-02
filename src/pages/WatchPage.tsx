@@ -194,12 +194,12 @@ export default function WatchPage() {
             </div>
           </div>
           <a
-            href={import.meta.env.VITE_VPN_AFFILIATE_URL || 'https://nordvpn.com'}
+            href={import.meta.env.VITE_VPN_AFFILIATE_URL || 'https://www.profitableratecpmnetwork.com/tmu3is0wf5?key=21a1ec5aea498f026813fc3a521b1af3'}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-red-600/20 hover:scale-105 transition shrink-0 cursor-pointer"
           >
-            <span>Get 70% Off VPN Deal</span>
+            <span>Unlock High-Speed Stream</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
