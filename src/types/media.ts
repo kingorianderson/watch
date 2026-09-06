@@ -69,6 +69,8 @@ export interface WatchHistoryItem {
   season?: number;
   episode?: number;
   timestamp: number;
+  progress?: number; // playback position in seconds
+  duration?: number; // total duration in seconds
 }
 
 export interface WatchlistItem {

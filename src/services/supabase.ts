@@ -122,6 +122,8 @@ export const cloudHistoryService = {
         season: row.season,
         episode: row.episode,
         timestamp: row.timestamp ? new Date(row.timestamp).getTime() : Date.now(),
+        progress: typeof row.progress === 'number' ? row.progress : undefined,
+        duration: typeof row.duration === 'number' ? row.duration : undefined,
       }));
     } catch (err) {
       console.warn('Failed to fetch cloud watch history:', err);
@@ -132,20 +134,34 @@ export const cloudHistoryService = {
   async addToHistory(userId: string, item: WatchHistoryItem): Promise<boolean> {
     if (!supabase) return false;
     try {
-      const { error } = await supabase.from('watch_history').upsert(
-        {
-          user_id: userId,
-          media_id: item.id,
-          title: item.title,
-          poster_path: item.poster_path,
-          backdrop_path: item.backdrop_path,
-          type: item.type,
-          season: item.season,
-          episode: item.episode,
-          timestamp: new Date(item.timestamp || Date.now()).toISOString(),
-        },
-        { onConflict: 'user_id,media_id,type' }
-      );
+      const payload: any = {
+        user_id: userId,
+        media_id: item.id,
+        title: item.title,
+        poster_path: item.poster_path,
+        backdrop_path: item.backdrop_path,
+        type: item.type,
+        season: item.season,
+        episode: item.episode,
+        timestamp: new Date(item.timestamp || Date.now()).toISOString(),
+      };
+
+      if (typeof item.progress === 'number') payload.progress = Math.floor(item.progress);
+      if (typeof item.duration === 'number') payload.duration = Math.floor(item.duration);
+
+      let { error } = await supabase.from('watch_history').upsert(payload, {
+        onConflict: 'user_id,media_id,type',
+      });
+
+      // Defensive fallback if columns progress/duration do not exist on the remote database yet
+      if (error && (error.message.includes('column') || error.message.includes('schema'))) {
+        delete payload.progress;
+        delete payload.duration;
+        const res = await supabase.from('watch_history').upsert(payload, {
+          onConflict: 'user_id,media_id,type',
+        });
+        error = res.error;
+      }
 
       if (error) {
         console.warn('Supabase addToHistory error:', error.message);

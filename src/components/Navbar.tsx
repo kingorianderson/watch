@@ -21,6 +21,7 @@ import { tmdbService, getPosterUrl } from '../services/tmdb';
 import type { MediaItem } from '../types/media';
 import { useAuth } from '../context/AuthContext';
 import { useWatchlist } from '../hooks/useWatchlist';
+import { useWatchHistory } from '../hooks/useWatchHistory';
 import UserProfileMenu from './UserProfileMenu';
 import { openSupportModal } from './SupportModal';
 
@@ -60,6 +61,7 @@ export default function Navbar() {
 
   const { user, openAuthModal } = useAuth();
   const { watchlist } = useWatchlist();
+  const { getLastWatched } = useWatchHistory();
 
   // Scroll listener
   useEffect(() => {
@@ -333,7 +335,10 @@ export default function Navbar() {
                         const title = item.title || item.name || 'Untitled';
                         const year = (item.release_date || item.first_air_date || '').substring(0, 4);
                         const isTv = item.media_type === 'tv' || (!item.release_date && !!item.first_air_date);
-                        const playUrl = isTv ? `/watch/tv/${item.id}/1/1` : `/watch/movie/${item.id}`;
+                        const lastWatched = isTv ? getLastWatched(item.id, 'tv') : null;
+                        const playUrl = isTv
+                          ? `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
+                          : `/watch/movie/${item.id}`;
 
                         return (
                           <Link
@@ -606,7 +611,10 @@ export default function Navbar() {
                     const title = item.title || item.name || 'Untitled';
                     const year = (item.release_date || item.first_air_date || '').substring(0, 4);
                     const isTv = item.media_type === 'tv' || (!item.release_date && !!item.first_air_date);
-                    const playUrl = isTv ? `/watch/tv/${item.id}/1/1` : `/watch/movie/${item.id}`;
+                    const lastWatched = isTv ? getLastWatched(item.id, 'tv') : null;
+                    const playUrl = isTv
+                      ? `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
+                      : `/watch/movie/${item.id}`;
 
                     return (
                       <Link

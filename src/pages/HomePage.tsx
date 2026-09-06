@@ -87,11 +87,21 @@ export default function HomePage() {
                   ? `/watch/tv/${item.id}/${item.season || 1}/${item.episode || 1}`
                   : `/watch/movie/${item.id}`;
 
+              const progressPct =
+                item.progress && item.duration && item.duration > 0
+                  ? Math.min(100, Math.round((item.progress / item.duration) * 100))
+                  : 0;
+
+              const timeLeft =
+                item.progress && item.duration && item.duration > item.progress
+                  ? Math.max(1, Math.round((item.duration - item.progress) / 60))
+                  : null;
+
               return (
                 <Link
                   key={`${item.type}-${item.id}`}
                   to={url}
-                  className="w-48 sm:w-56 shrink-0 group relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-zinc-600 transition"
+                  className="w-48 sm:w-56 shrink-0 group relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-zinc-600 transition shadow-md"
                 >
                   <div className="relative aspect-video w-full bg-zinc-950 overflow-hidden">
                     <img
@@ -100,21 +110,53 @@ export default function HomePage() {
                       className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
+
+                    {/* Top Episode / Type Badge */}
+                    <div className="absolute top-2 left-2 z-10">
+                      {item.type === 'tv' && item.season ? (
+                        <span className="px-2 py-0.5 rounded-md bg-zinc-950/90 text-red-400 font-mono text-[10px] font-bold border border-red-500/20 shadow">
+                          S{item.season} : E{item.episode || 1}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md bg-zinc-950/90 text-zinc-300 font-mono text-[10px] font-bold border border-zinc-700/40">
+                          Movie
+                        </span>
+                      )}
+                    </div>
+
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-10 h-10 rounded-full bg-red-600/90 group-hover:bg-red-500 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition">
                         <Play className="w-4 h-4 fill-white ml-0.5" />
                       </div>
                     </div>
+
+                    {/* Progress Bar */}
+                    {progressPct > 0 && (
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800/90 z-20">
+                        <div
+                          className="h-full bg-gradient-to-r from-red-600 to-amber-500"
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
+
                   <div className="p-3">
                     <h4 className="text-sm font-semibold text-zinc-200 group-hover:text-red-400 truncate">
                       {item.title}
                     </h4>
-                    <p className="text-xs text-zinc-400 mt-0.5">
-                      {item.type === 'tv'
-                        ? `Season ${item.season || 1}, Episode ${item.episode || 1}`
-                        : 'Movie'}
-                    </p>
+                    <div className="flex items-center justify-between text-xs text-zinc-400 mt-1">
+                      <span>
+                        {item.type === 'tv'
+                          ? `S${item.season || 1} • Ep ${item.episode || 1}`
+                          : 'Movie'}
+                      </span>
+                      {timeLeft ? (
+                        <span className="text-[11px] text-amber-400 font-mono">{timeLeft}m left</span>
+                      ) : progressPct > 0 ? (
+                        <span className="text-[11px] text-emerald-400 font-mono">{progressPct}%</span>
+                      ) : null}
+                    </div>
                   </div>
                 </Link>
               );

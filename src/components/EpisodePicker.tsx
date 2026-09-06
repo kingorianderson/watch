@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Star, Layers } from 'lucide-react';
+import { Play, Layers, CheckCircle2 } from 'lucide-react';
 import { tmdbService, getBackdropUrl } from '../services/tmdb';
 import type { Episode, SeasonSummary } from '../types/media';
+import { useWatchHistory } from '../hooks/useWatchHistory';
 
 interface EpisodePickerProps {
   tvId: number | string;
@@ -21,6 +22,7 @@ export default function EpisodePicker({
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { getEpisodeProgress } = useWatchHistory();
 
   // Filter out Season 0 (Specials) if preferred, or keep if valid
   const validSeasons = (seasons || []).filter((s) => s.season_number > 0);
@@ -64,7 +66,7 @@ export default function EpisodePicker({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-zinc-800">
         <div className="flex items-center gap-2">
           <Layers className="w-5 h-5 text-red-500" />
-          <h3 className="text-lg font-bold text-white">Episodes & Seasons</h3>
+          <h3 className="text-lg font-bold text-white">Episodes &amp; Seasons</h3>
         </div>
 
         {/* Season Selector */}
@@ -76,7 +78,7 @@ export default function EpisodePicker({
             id="season-select"
             value={selectedSeason}
             onChange={(e) => setSelectedSeason(Number(e.target.value))}
-            className="bg-zinc-800 text-sm font-semibold text-white px-3 py-1.5 rounded-lg border border-zinc-700 focus:outline-none focus:border-red-500"
+            className="bg-zinc-800 text-sm font-semibold text-white px-3 py-1.5 rounded-lg border border-zinc-700 focus:outline-none focus:border-red-500 cursor-pointer"
           >
             {validSeasons.length > 0 ? (
               validSeasons.map((s) => (
@@ -91,7 +93,7 @@ export default function EpisodePicker({
         </div>
       </div>
 
-      {/* Episode Cards Grid / List */}
+      {/* Episode Cards Grid */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-8">
           {[1, 2, 3, 4, 5, 6].map((n) => (
@@ -99,18 +101,32 @@ export default function EpisodePicker({
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto pr-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[520px] overflow-y-auto pr-1">
           {episodes.map((ep) => {
             const isPlaying =
               selectedSeason === currentSeason && ep.episode_number === currentEpisode;
+
+            const progressInfo = getEpisodeProgress(
+              Number(tvId),
+              'tv',
+              selectedSeason,
+              ep.episode_number
+            );
+
+            const progressPct =
+              progressInfo?.progress && progressInfo?.duration && progressInfo.duration > 0
+                ? Math.min(100, Math.round((progressInfo.progress / progressInfo.duration) * 100))
+                : 0;
+
+            const isWatched = progressPct >= 85;
 
             return (
               <button
                 key={ep.id}
                 onClick={() => handleEpisodeSelect(ep.episode_number)}
-                className={`flex flex-col text-left rounded-xl overflow-hidden border transition-all duration-200 group ${
+                className={`flex flex-col text-left rounded-xl overflow-hidden border transition-all duration-200 group cursor-pointer ${
                   isPlaying
-                    ? 'bg-red-950/40 border-red-500/80 shadow-lg shadow-red-950/50'
+                    ? 'bg-red-950/40 border-red-500/80 shadow-lg shadow-red-950/50 ring-1 ring-red-500/40'
                     : 'bg-zinc-800/40 border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800/80'
                 }`}
               >
@@ -139,6 +155,29 @@ export default function EpisodePicker({
                   <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-zinc-950/90 text-xs font-mono font-bold text-white border border-zinc-700/50">
                     EP {ep.episode_number}
                   </span>
+
+                  {isPlaying && (
+                    <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider font-mono shadow-md animate-pulse">
+                      Now Watching
+                    </span>
+                  )}
+
+                  {!isPlaying && isWatched && (
+                    <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold flex items-center gap-1 font-mono">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Watched</span>
+                    </span>
+                  )}
+
+                  {/* Playback Progress Bar */}
+                  {progressPct > 0 && (
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800">
+                      <div
+                        className="h-full bg-gradient-to-r from-red-600 to-amber-500"
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Info */}
@@ -158,12 +197,7 @@ export default function EpisodePicker({
 
                   <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-3 pt-2 border-t border-zinc-800/60">
                     {ep.air_date && <span>{ep.air_date}</span>}
-                    {ep.vote_average ? (
-                      <span className="flex items-center gap-1 text-amber-400">
-                        <Star className="w-3 h-3 fill-amber-400" />
-                        {ep.vote_average.toFixed(1)}
-                      </span>
-                    ) : null}
+                    {ep.runtime && <span>{ep.runtime} min</span>}
                   </div>
                 </div>
               </button>
@@ -174,4 +208,3 @@ export default function EpisodePicker({
     </div>
   );
 }
-

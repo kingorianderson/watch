@@ -12,7 +12,7 @@ export default function WatchlistPage() {
   usePageTitle('My Library');
   const [activeTab, setActiveTab] = useState<'watchlist' | 'history'>('watchlist');
   const { watchlist, removeFromWatchlist } = useWatchlist();
-  const { history, removeFromHistory, clearHistory } = useWatchHistory();
+  const { history, removeFromHistory, clearHistory, getLastWatched } = useWatchHistory();
   const [modalItem, setModalItem] = useState<MediaItem | null>(null);
 
   return (
@@ -82,16 +82,23 @@ export default function WatchlistPage() {
                     </div>
 
                     <div className="absolute inset-0 z-10 bg-gradient-to-t from-zinc-950 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition flex items-center justify-center pointer-events-none group-hover:pointer-events-auto">
-                      <Link
-                        to={
-                          item.type === 'tv'
-                            ? `/watch/tv/${item.id}/1/1`
-                            : `/watch/movie/${item.id}`
-                        }
-                        className="w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xl hover:scale-110 transition cursor-pointer"
-                      >
-                        <Play className="w-5 h-5 fill-white ml-0.5" />
-                      </Link>
+                    {(() => {
+                      const isTv = item.type === 'tv';
+                      const lastWatched = isTv ? getLastWatched(item.id, 'tv') : null;
+                      const playUrl = isTv
+                        ? `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
+                        : `/watch/movie/${item.id}`;
+
+                      return (
+                        <Link
+                          to={playUrl}
+                          className="w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xl hover:scale-110 transition cursor-pointer"
+                          title={lastWatched ? `Resume S${lastWatched.season}:E${lastWatched.episode}` : 'Watch Now'}
+                        >
+                          <Play className="w-5 h-5 fill-white ml-0.5" />
+                        </Link>
+                      );
+                    })()}
                     </div>
                   </div>
 
@@ -151,6 +158,16 @@ export default function WatchlistPage() {
                     ? `/watch/tv/${item.id}/${item.season || 1}/${item.episode || 1}`
                     : `/watch/movie/${item.id}`;
 
+                const progressPct =
+                  item.progress && item.duration && item.duration > 0
+                    ? Math.min(100, Math.round((item.progress / item.duration) * 100))
+                    : 0;
+
+                const timeLeft =
+                  item.progress && item.duration && item.duration > item.progress
+                    ? Math.max(1, Math.round((item.duration - item.progress) / 60))
+                    : null;
+
                 return (
                   <div
                     key={`${item.type}-${item.id}`}
@@ -162,29 +179,55 @@ export default function WatchlistPage() {
                         alt={item.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition"
                       />
+                      {/* Episode Badge */}
+                      {item.type === 'tv' && item.season && (
+                        <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-zinc-950/90 text-red-400 font-mono text-[9px] font-bold border border-red-500/20">
+                          S{item.season}:E{item.episode || 1}
+                        </span>
+                      )}
+                      {/* Progress Bar */}
+                      {progressPct > 0 && (
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800/90">
+                          <div
+                            className="h-full bg-gradient-to-r from-red-600 to-amber-500"
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex-1 min-w-0">
                       <h4 className="text-sm font-semibold text-zinc-200 group-hover:text-red-400 truncate">
                         {item.title}
                       </h4>
-                      <p className="text-xs text-zinc-400 mt-0.5">
-                        {item.type === 'tv'
-                          ? `Season ${item.season || 1} • Episode ${item.episode || 1}`
-                          : 'Movie'}
+                      <p className="text-xs text-zinc-400 mt-0.5 flex items-center gap-1.5">
+                        <span>
+                          {item.type === 'tv'
+                            ? `Season ${item.season || 1} • Ep ${item.episode || 1}`
+                            : 'Movie'}
+                        </span>
+                        {timeLeft ? (
+                          <span className="text-amber-400 font-mono font-medium">• {timeLeft}m left</span>
+                        ) : progressPct > 0 ? (
+                          <span className="text-emerald-400 font-mono">• {progressPct}%</span>
+                        ) : null}
                       </p>
                       <Link
                         to={playUrl}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-red-400 hover:text-red-300 mt-2"
                       >
                         <Play className="w-3 h-3 fill-current" />
-                        <span>Resume</span>
+                        <span>
+                          {item.type === 'tv' && item.season
+                            ? `Resume S${item.season}:E${item.episode || 1}`
+                            : 'Resume'}
+                        </span>
                       </Link>
                     </div>
 
                     <button
                       onClick={() => removeFromHistory(item.id, item.type)}
-                      className="p-2 text-zinc-500 hover:text-red-400 rounded-lg hover:bg-zinc-800 transition"
+                      className="p-2 text-zinc-500 hover:text-red-400 rounded-lg hover:bg-zinc-800 transition cursor-pointer"
                       title="Remove from history"
                     >
                       <Trash2 className="w-4 h-4" />

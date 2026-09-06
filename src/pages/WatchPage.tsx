@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Star,
@@ -7,11 +7,9 @@ import {
   Bookmark,
   ChevronRight,
   ChevronLeft,
-  Tv,
   Share2,
   Check,
   Copy,
-  Sparkles,
   Zap,
   ExternalLink,
 } from 'lucide-react';
@@ -45,8 +43,18 @@ export default function WatchPage() {
   const [copied, setCopied] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  const { addToHistory } = useWatchHistory();
+  const { addToHistory, updateProgress, getLastWatched, getEpisodeProgress } = useWatchHistory();
   const { toggleWatchlist, isInWatchlist } = useWatchlist();
+
+  // If user visits /watch/tv/:id without season/episode in URL, resume last watched season/episode
+  useEffect(() => {
+    if (mediaType === 'tv' && id && (!season || !episode)) {
+      const lastWatched = getLastWatched(Number(id), 'tv');
+      const targetSeason = lastWatched?.season || 1;
+      const targetEpisode = lastWatched?.episode || 1;
+      navigate(`/watch/tv/${id}/${targetSeason}/${targetEpisode}`, { replace: true });
+    }
+  }, [id, mediaType, season, episode, getLastWatched, navigate]);
 
   useEffect(() => {
     if (!id) return;
@@ -66,7 +74,15 @@ export default function WatchPage() {
           setCast(castData);
           setSimilar(similarData);
 
-          // Record in watch history
+          // Get existing saved progress if any
+          const savedProgress = getEpisodeProgress(
+            Number(id),
+            mediaType,
+            mediaType === 'tv' ? currentSeason : 1,
+            mediaType === 'tv' ? currentEpisode : 1
+          );
+
+          // Record or refresh in watch history
           addToHistory({
             id: Number(id),
             title: detailData.title || detailData.name || 'Untitled',
@@ -75,6 +91,8 @@ export default function WatchPage() {
             type: mediaType,
             season: mediaType === 'tv' ? currentSeason : undefined,
             episode: mediaType === 'tv' ? currentEpisode : undefined,
+            progress: savedProgress?.progress,
+            duration: savedProgress?.duration,
           });
         }
       } catch (err) {
@@ -88,6 +106,35 @@ export default function WatchPage() {
       isMounted = false;
     };
   }, [id, mediaType, currentSeason, currentEpisode]);
+
+  // Determine Next Episode / Next Season information
+  const nextEpisodeInfo = useMemo(() => {
+    if (mediaType !== 'tv' || !details?.seasons) return null;
+
+    const validSeasons = details.seasons.filter((s) => s.season_number > 0);
+    const currSeasonObj = validSeasons.find((s) => s.season_number === currentSeason);
+    const maxEpisodesInSeason = currSeasonObj?.episode_count || 1;
+
+    if (currentEpisode < maxEpisodesInSeason) {
+      return {
+        season: currentSeason,
+        episode: currentEpisode + 1,
+        isNextSeason: false,
+      };
+    } else {
+      // Find next season if available
+      const nextSeasonNum = currentSeason + 1;
+      const nextSeasonObj = validSeasons.find((s) => s.season_number === nextSeasonNum);
+      if (nextSeasonObj && nextSeasonObj.episode_count > 0) {
+        return {
+          season: nextSeasonNum,
+          episode: 1,
+          isNextSeason: true,
+        };
+      }
+    }
+    return null;
+  }, [mediaType, details, currentSeason, currentEpisode]);
 
   if (!id) return null;
 
@@ -108,12 +155,23 @@ export default function WatchPage() {
     if (currentEpisode > 1) {
       navigate(`/watch/tv/${id}/${currentSeason}/${currentEpisode - 1}`);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (currentSeason > 1 && details?.seasons) {
+      const prevSeasonNum = currentSeason - 1;
+      const prevSeasonObj = details.seasons.find((s) => s.season_number === prevSeasonNum);
+      const prevMaxEp = prevSeasonObj?.episode_count || 1;
+      navigate(`/watch/tv/${id}/${prevSeasonNum}/${prevMaxEp}`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const handleNextEpisode = () => {
-    navigate(`/watch/tv/${id}/${currentSeason}/${currentEpisode + 1}`);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (nextEpisodeInfo) {
+      navigate(`/watch/tv/${id}/${nextEpisodeInfo.season}/${nextEpisodeInfo.episode}`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      navigate(`/watch/tv/${id}/${currentSeason}/${currentEpisode + 1}`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleShare = async () => {
@@ -142,6 +200,15 @@ export default function WatchPage() {
     setTimeout(() => setCopied(false), 2500);
   };
 
+  // Get initial start time for playback
+  const savedEpisodeProgress = getEpisodeProgress(
+    Number(id),
+    mediaType,
+    mediaType === 'tv' ? currentSeason : 1,
+    mediaType === 'tv' ? currentEpisode : 1
+  );
+  const initialStartAt = savedEpisodeProgress?.progress || 0;
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white pt-20 pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
@@ -160,7 +227,7 @@ export default function WatchPage() {
           <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
           <span className="text-zinc-200 truncate">{title}</span>
           {mediaType === 'tv' && (
-            <span className="px-2 py-0.5 rounded bg-zinc-800 text-red-400 font-mono text-xs">
+            <span className="px-2 py-0.5 rounded bg-zinc-800 text-red-400 font-mono text-xs font-bold">
               S{currentSeason} : E{currentEpisode}
             </span>
           )}
@@ -173,6 +240,12 @@ export default function WatchPage() {
           season={currentSeason}
           episode={currentEpisode}
           title={title}
+          startAt={initialStartAt}
+          onProgressUpdate={(prog, dur) => {
+            updateProgress(Number(id), mediaType, prog, dur, currentSeason, currentEpisode);
+          }}
+          nextEpisodeInfo={nextEpisodeInfo}
+          onPlayNextEpisode={handleNextEpisode}
         />
 
         {/* Pro Stream Booster & VPN Affiliate Card */}
@@ -209,22 +282,33 @@ export default function WatchPage() {
           <div className="flex items-center justify-between bg-zinc-900/60 border border-zinc-800 p-3 rounded-xl">
             <button
               onClick={handlePrevEpisode}
-              disabled={currentEpisode <= 1}
+              disabled={currentEpisode <= 1 && currentSeason <= 1}
               className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 disabled:opacity-40 disabled:pointer-events-none text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
-              <span>Previous Episode</span>
+              <span>
+                {currentEpisode === 1 && currentSeason > 1 ? `Previous Season` : `Previous Episode`}
+              </span>
             </button>
 
-            <span className="text-xs sm:text-sm font-bold text-red-400 font-mono">
-              Season {currentSeason} • Episode {currentEpisode}
-            </span>
+            <div className="text-center">
+              <span className="text-xs sm:text-sm font-bold text-red-400 font-mono">
+                Season {currentSeason} • Episode {currentEpisode}
+              </span>
+              {nextEpisodeInfo?.isNextSeason && (
+                <div className="text-[10px] text-amber-400 font-medium">Season Finale</div>
+              )}
+            </div>
 
             <button
               onClick={handleNextEpisode}
               className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition shadow-lg shadow-red-600/30 cursor-pointer"
             >
-              <span>Next Episode</span>
+              <span>
+                {nextEpisodeInfo?.isNextSeason
+                  ? `Start Season ${nextEpisodeInfo.season}`
+                  : `Next Episode`}
+              </span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -239,168 +323,111 @@ export default function WatchPage() {
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-red-600/20 text-red-400 border border-red-500/30">
                     {mediaType === 'tv' ? 'TV Series' : 'Movie'}
                   </span>
-                  {details.genres?.map((g) => (
-                    <span
-                      key={g.id}
-                      className="px-2.5 py-0.5 rounded-md text-xs bg-zinc-800 text-zinc-300"
-                    >
-                      {g.name}
+                  {details.vote_average > 0 && (
+                    <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      <Star className="w-3.5 h-3.5 fill-amber-400" />
+                      <span>{details.vote_average.toFixed(1)}</span>
                     </span>
-                  ))}
-                </div>
-
-                <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight m-0">
-                  {title}
-                </h1>
-
-                {/* Metadata */}
-                <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-400">
-                  <div className="flex items-center gap-1 text-amber-400 font-semibold">
-                    <Star className="w-4 h-4 fill-amber-400" />
-                    <span>{details.vote_average ? details.vote_average.toFixed(1) : 'NR'}</span>
-                    <span className="text-xs text-zinc-500 font-normal">
-                      ({details.vote_count} votes)
-                    </span>
-                  </div>
+                  )}
                   {year && (
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-4 h-4" />
+                    <span className="flex items-center gap-1 text-xs text-zinc-400">
+                      <Calendar className="w-3.5 h-3.5" />
                       <span>{year}</span>
-                    </div>
+                    </span>
                   )}
-                  {details.runtime && (
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      <span>{details.runtime} min</span>
-                    </div>
-                  )}
-                  {details.number_of_seasons && (
-                    <div className="flex items-center gap-1">
-                      <Tv className="w-4 h-4" />
-                      <span>{details.number_of_seasons} Seasons</span>
-                    </div>
-                  )}
+                  {details.runtime ? (
+                    <span className="flex items-center gap-1 text-xs text-zinc-400">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>{details.runtime}m</span>
+                    </span>
+                  ) : null}
                 </div>
+
+                <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">{title}</h1>
+
+                {details.tagline && (
+                  <p className="text-sm italic text-zinc-400">{details.tagline}</p>
+                )}
+
+                <p className="text-sm sm:text-base text-zinc-300 leading-relaxed max-w-4xl">
+                  {details.overview || 'No overview available for this title.'}
+                </p>
+
+                {/* Genre Tags */}
+                {details.genres && details.genres.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {details.genres.map((g) => (
+                      <span
+                        key={g.id}
+                        className="px-2.5 py-1 rounded-lg bg-zinc-800 text-xs font-medium text-zinc-300 border border-zinc-700/50"
+                      >
+                        {g.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Action Buttons: Watchlist & Share */}
-              <div className="relative flex flex-wrap items-center gap-3">
+              {/* Action Toolbar */}
+              <div className="flex flex-wrap md:flex-col gap-2.5 w-full md:w-auto shrink-0">
                 <button
                   onClick={() => toggleWatchlist(details)}
-                  className={`px-4 py-2.5 rounded-xl border text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
+                  className={`flex-1 md:flex-none px-4 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
                     isSaved
-                      ? 'bg-red-600/20 border-red-500/50 text-red-400'
-                      : 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:text-white hover:bg-zinc-700'
+                      ? 'bg-red-600 text-white shadow-lg shadow-red-600/30 hover:bg-red-500'
+                      : 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700 hover:text-white border border-zinc-700'
                   }`}
                 >
-                  <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-red-500' : ''}`} />
-                  <span>{isSaved ? 'Saved' : 'Save'}</span>
+                  <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-white' : ''}`} />
+                  <span>{isSaved ? 'Saved in Watchlist' : 'Add to Watchlist'}</span>
                 </button>
 
                 <button
                   onClick={handleShare}
-                  className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 hover:text-white text-sm font-semibold flex items-center gap-2 transition cursor-pointer"
-                  title="Share this title"
+                  className="flex-1 md:flex-none px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold text-xs flex items-center justify-center gap-2 border border-zinc-700 transition cursor-pointer"
                 >
-                  <Share2 className="w-4 h-4 text-red-400" />
-                  <span>Share</span>
+                  <Share2 className="w-4 h-4" />
+                  <span>Share Stream</span>
                 </button>
-
-                {/* Share Dropdown Modal (Fallback / Desktop) */}
-                {showShareModal && (
-                  <div className="absolute right-0 top-full mt-2 w-72 p-4 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl z-30 space-y-3 animate-in fade-in slide-in-from-top-2">
-                    <div className="text-xs font-bold text-zinc-300">Share "{title}"</div>
-                    
-                    {/* Copy Link Row */}
-                    <div className="flex items-center gap-2 bg-zinc-950 p-2 rounded-xl border border-zinc-800">
-                      <input
-                        type="text"
-                        readOnly
-                        value={window.location.href}
-                        className="bg-transparent text-xs text-zinc-400 flex-1 truncate focus:outline-none"
-                      />
-                      <button
-                        onClick={handleCopyLink}
-                        className="p-1.5 rounded-lg bg-zinc-800 hover:bg-red-600 text-zinc-200 hover:text-white transition cursor-pointer shrink-0"
-                        title="Copy link"
-                      >
-                        {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-
-                    {copied && (
-                      <div className="text-[11px] text-emerald-400 font-medium text-center">
-                        ✓ Link copied to clipboard!
-                      </div>
-                    )}
-
-                    {/* Quick Social Buttons */}
-                    <div className="grid grid-cols-3 gap-2 pt-1">
-                      <a
-                        href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Watch "${title}" on WATCHD: ${window.location.href}`)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-800/40 text-emerald-300 text-xs font-bold text-center transition"
-                      >
-                        WhatsApp
-                      </a>
-                      <a
-                        href={`https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(`Watch "${title}" on WATCHD!`)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 rounded-xl bg-sky-950/40 hover:bg-sky-900/50 border border-sky-800/40 text-sky-300 text-xs font-bold text-center transition"
-                      >
-                        Telegram
-                      </a>
-                      <a
-                        href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Watch "${title}" on WATCHD: ${window.location.href}`)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-xs font-bold text-center transition"
-                      >
-                        X / Twitter
-                      </a>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
-
-            {/* Synopsis */}
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
-                Synopsis
-              </h3>
-              <p className="text-zinc-300 leading-relaxed text-sm sm:text-base">
-                {details.overview || 'No synopsis available.'}
-              </p>
-            </div>
-
-            {/* Cast List */}
-            {cast.length > 0 && (
-              <div className="pt-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
-                  Cast & Crew
-                </h3>
-                <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
-                  {cast.map((actor) => (
-                    <div key={actor.id} className="w-20 shrink-0 text-center space-y-1">
-                      <img
-                        src={getProfileUrl(actor.profile_path)}
-                        alt={actor.name}
-                        className="w-14 h-14 rounded-full object-cover mx-auto bg-zinc-800 border border-zinc-700"
-                      />
-                      <p className="text-xs font-semibold text-zinc-200 truncate">{actor.name}</p>
-                      <p className="text-[10px] text-zinc-500 truncate">{actor.character}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
-        {/* TV Series Episode Guide (if TV Show) */}
+        {/* Share Modal Dialog */}
+        {showShareModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+              <h3 className="text-lg font-bold text-white">Share This Stream</h3>
+              <p className="text-xs text-zinc-400">
+                Copy the link below to invite friends to watch this title in HD with you:
+              </p>
+              <div className="flex items-center gap-2 bg-zinc-950 p-2 rounded-xl border border-zinc-800">
+                <input
+                  type="text"
+                  readOnly
+                  value={window.location.href}
+                  className="bg-transparent text-xs text-zinc-300 flex-1 outline-none font-mono"
+                />
+                <button
+                  onClick={handleCopyLink}
+                  className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copied ? 'Copied!' : 'Copy'}</span>
+                </button>
+              </div>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="w-full py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TV Series Episode & Season Picker */}
         {mediaType === 'tv' && details?.seasons && (
           <EpisodePicker
             tvId={id}
@@ -410,24 +437,44 @@ export default function WatchPage() {
           />
         )}
 
-        {/* Recommendations / Similar Titles */}
-        {similar.length > 0 && (
-          <div className="pt-4">
-            <MediaRow
-              title="You May Also Like"
-              items={similar}
-              icon={<Sparkles className="w-5 h-5 text-red-500" />}
-              onOpenDetails={(item) => setModalItem(item)}
-            />
+        {/* Cast & Crew Carousel */}
+        {cast.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+              <span>Top Cast</span>
+              <span className="text-xs text-zinc-500 font-normal">({cast.length})</span>
+            </h3>
+            <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+              {cast.map((c) => (
+                <div key={c.id} className="w-24 sm:w-28 shrink-0 text-center space-y-1.5">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-full overflow-hidden bg-zinc-800 border-2 border-zinc-700/60 shadow-md">
+                    <img
+                      src={getProfileUrl(c.profile_path)}
+                      alt={c.name}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <h4 className="text-xs font-semibold text-zinc-200 line-clamp-1">{c.name}</h4>
+                  <p className="text-[11px] text-zinc-500 line-clamp-1">{c.character}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Modal */}
-        {modalItem && (
-          <MediaDetailsModal item={modalItem} onClose={() => setModalItem(null)} />
+        {/* Similar Titles Shelf */}
+        {similar.length > 0 && (
+          <MediaRow
+            title="You May Also Like"
+            items={similar}
+            onOpenDetails={(item) => setModalItem(item)}
+          />
         )}
       </div>
+
+      {/* Media Details Modal */}
+      <MediaDetailsModal item={modalItem} onClose={() => setModalItem(null)} />
     </div>
   );
 }
-

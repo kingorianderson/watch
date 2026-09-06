@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Server, RefreshCw, Sparkles, Info } from 'lucide-react';
+﻿import { useState, useEffect, useRef } from 'react';
+import { Server, RefreshCw, Sparkles, Info, Play, RotateCcw, X } from 'lucide-react';
 import { STREAM_SERVERS, type StreamServer } from '../services/providers';
 
 interface VideoPlayerProps {
@@ -8,6 +8,23 @@ interface VideoPlayerProps {
   season?: number;
   episode?: number;
   title: string;
+  startAt?: number;
+  onProgressUpdate?: (progress: number, duration: number) => void;
+  onEnded?: () => void;
+  nextEpisodeInfo?: { season: number; episode: number; isNextSeason?: boolean } | null;
+  onPlayNextEpisode?: () => void;
+}
+
+function formatTime(seconds: number): string {
+  if (!seconds || isNaN(seconds)) return '0:00';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  if (hrs > 0) {
+    return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  }
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
 
 export default function VideoPlayer({
@@ -16,27 +33,106 @@ export default function VideoPlayer({
   season = 1,
   episode = 1,
   title,
+  startAt = 0,
+  onProgressUpdate,
+  onEnded,
+  nextEpisodeInfo,
+  onPlayNextEpisode,
 }: VideoPlayerProps) {
   const [currentServer, setCurrentServer] = useState<StreamServer>(STREAM_SERVERS[0]);
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [activeStartAt, setActiveStartAt] = useState<number>(startAt);
+  const [showResumeToast, setShowResumeToast] = useState<boolean>(false);
+  const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null);
 
-  // When id, season, episode, or server changes, reset loader
+  const countdownTimerRef = useRef<any>(null);
+  const hasTriggeredNextRef = useRef<boolean>(false);
+
+  // When id, season, episode, or server changes, reset loader and playback states
   useEffect(() => {
     setIsLoading(true);
+    setActiveStartAt(startAt);
     setIframeKey((prev) => prev + 1);
-  }, [tmdbId, type, season, episode, currentServer]);
+    hasTriggeredNextRef.current = false;
+    setAutoPlayCountdown(null);
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+
+    if (startAt > 15) {
+      setShowResumeToast(true);
+      const timer = setTimeout(() => setShowResumeToast(false), 7000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowResumeToast(false);
+    }
+  }, [tmdbId, type, season, episode, currentServer, startAt]);
+
+  // Listen to postMessage events from VidLink
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Validate origin from vidlink.pro
+      if (typeof event.origin === 'string' && event.origin.includes('vidlink.pro')) {
+        const data = event.data;
+        if (data?.type === 'PLAYER_EVENT' && data.data) {
+          const { event: eventType, currentTime, duration } = data.data;
+
+          if (typeof currentTime === 'number') {
+            onProgressUpdate?.(currentTime, duration || 0);
+
+            // Trigger auto next episode when finished
+            const isNearEnd = duration > 60 && currentTime >= duration - 15;
+            if ((eventType === 'ended' || isNearEnd) && !hasTriggeredNextRef.current && nextEpisodeInfo && onPlayNextEpisode) {
+              hasTriggeredNextRef.current = true;
+              onEnded?.();
+              startAutoPlayCountdown();
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [onProgressUpdate, onEnded, nextEpisodeInfo, onPlayNextEpisode]);
+
+  const startAutoPlayCountdown = () => {
+    setAutoPlayCountdown(6);
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+
+    countdownTimerRef.current = setInterval(() => {
+      setAutoPlayCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(countdownTimerRef.current);
+          if (onPlayNextEpisode) onPlayNextEpisode();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const cancelAutoPlay = () => {
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    setAutoPlayCountdown(null);
+  };
 
   const streamUrl =
     type === 'movie'
-      ? currentServer.getMovieUrl(tmdbId)
-      : currentServer.getTvUrl(tmdbId, season, episode);
+      ? currentServer.getMovieUrl(tmdbId, activeStartAt)
+      : currentServer.getTvUrl(tmdbId, season, episode, activeStartAt);
 
   const handleServerChange = (server: StreamServer) => {
     setCurrentServer(server);
   };
 
   const handleReload = () => {
+    setIsLoading(true);
+    setIframeKey((prev) => prev + 1);
+  };
+
+  const handleStartOver = () => {
+    setActiveStartAt(0);
+    setShowResumeToast(false);
     setIsLoading(true);
     setIframeKey((prev) => prev + 1);
   };
@@ -53,6 +149,75 @@ export default function VideoPlayer({
             <div className="flex items-center gap-1.5 text-xs text-amber-400 mt-2 font-medium bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-800/40">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Loading HD Video Feed</span>
+            </div>
+          </div>
+        )}
+
+        {/* Resumed from timestamp banner toast */}
+        {showResumeToast && activeStartAt > 15 && (
+          <div className="absolute top-4 left-4 z-30 flex items-center gap-2.5 bg-zinc-900/90 border border-emerald-500/40 backdrop-blur-md px-3.5 py-2 rounded-xl text-xs text-white shadow-xl animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>
+              Resumed from <strong className="text-emerald-400 font-mono">{formatTime(activeStartAt)}</strong>
+            </span>
+            <button
+              onClick={handleStartOver}
+              className="ml-1 px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Start Over</span>
+            </button>
+            <button
+              onClick={() => setShowResumeToast(false)}
+              className="text-zinc-500 hover:text-white p-0.5 rounded cursor-pointer ml-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Auto Next Episode Countdown Overlay */}
+        {autoPlayCountdown !== null && nextEpisodeInfo && (
+          <div className="absolute bottom-6 right-6 z-40 bg-zinc-950/95 border border-red-600/50 backdrop-blur-md p-4 rounded-2xl shadow-2xl max-w-xs space-y-3 animate-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-red-400 font-mono">
+                {nextEpisodeInfo.isNextSeason ? 'Next Season Up' : 'Up Next'}
+              </span>
+              <button
+                onClick={cancelAutoPlay}
+                className="text-zinc-500 hover:text-white p-1 rounded-lg hover:bg-zinc-850 cursor-pointer"
+                title="Cancel Auto-play"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">
+                {nextEpisodeInfo.isNextSeason
+                  ? `Season ${nextEpisodeInfo.season} • Episode 1`
+                  : `Season ${nextEpisodeInfo.season} • Episode ${nextEpisodeInfo.episode}`}
+              </p>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Playing automatically in <strong className="text-red-400 font-mono text-sm">{autoPlayCountdown}s</strong>...
+              </p>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => {
+                  cancelAutoPlay();
+                  if (onPlayNextEpisode) onPlayNextEpisode();
+                }}
+                className="flex-1 py-1.5 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-red-600/30 transition cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5 fill-white" />
+                <span>Play Now</span>
+              </button>
+              <button
+                onClick={cancelAutoPlay}
+                className="py-1.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition cursor-pointer"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}
@@ -124,7 +289,7 @@ export default function VideoPlayer({
         <div className="pt-2 border-t border-zinc-800/60 flex items-center gap-2 text-[11px] text-zinc-400">
           <Info className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
           <span>
-            If a video is slow or buffers, click any other server above. For 100% zero ads across all streams, use <strong>Brave Browser</strong>.
+            Server 1 automatically saves your progress and resumes right where you left off. If a stream buffers, switch servers above.
           </span>
         </div>
       </div>

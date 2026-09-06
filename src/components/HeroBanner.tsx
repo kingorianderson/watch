@@ -4,15 +4,17 @@ import { Play, Info, Bookmark, Star, Sparkles } from 'lucide-react';
 import { getBackdropUrl } from '../services/tmdb';
 import type { MediaItem } from '../types/media';
 import { useWatchlist } from '../hooks/useWatchlist';
+import { useWatchHistory } from '../hooks/useWatchHistory';
 
 interface HeroBannerProps {
   items: MediaItem[];
-  onOpenDetails: (item: MediaItem) => void;
+  onOpenDetails?: (item: MediaItem) => void;
 }
 
 export default function HeroBanner({ items, onOpenDetails }: HeroBannerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const { toggleWatchlist, isInWatchlist } = useWatchlist();
+  const { getLastWatched } = useWatchHistory();
 
   // Auto rotate banner every 8 seconds
   useEffect(() => {
@@ -31,7 +33,11 @@ export default function HeroBanner({ items, onOpenDetails }: HeroBannerProps) {
   const year = rawDate ? rawDate.substring(0, 4) : '';
   const isTv = current.media_type === 'tv' || (!current.release_date && !!current.first_air_date);
   const isSaved = isInWatchlist(current.id);
-  const playUrl = isTv ? `/watch/tv/${current.id}/1/1` : `/watch/movie/${current.id}`;
+
+  const lastWatched = getLastWatched(current.id, isTv ? 'tv' : 'movie');
+  const playUrl = isTv
+    ? `/watch/tv/${current.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
+    : `/watch/movie/${current.id}`;
 
   return (
     <div className="relative w-full h-[70vh] min-h-[500px] max-h-[750px] overflow-hidden bg-zinc-950">
@@ -91,16 +97,24 @@ export default function HeroBanner({ items, onOpenDetails }: HeroBannerProps) {
               className="px-6 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold flex items-center gap-2 shadow-xl shadow-red-600/40 hover:scale-105 transition duration-200"
             >
               <Play className="w-5 h-5 fill-white" />
-              <span>Watch Now</span>
+              <span>
+                {lastWatched
+                  ? isTv
+                    ? `Resume S${lastWatched.season || 1}:E${lastWatched.episode || 1}`
+                    : 'Resume Movie'
+                  : 'Watch Now'}
+              </span>
             </Link>
 
-            <button
-              onClick={() => onOpenDetails(current)}
-              className="px-5 py-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/90 text-zinc-100 font-semibold flex items-center gap-2 backdrop-blur-md border border-zinc-700/60 transition"
-            >
-              <Info className="w-5 h-5 text-zinc-300" />
-              <span>Details & Trailer</span>
-            </button>
+            {onOpenDetails && (
+              <button
+                onClick={() => onOpenDetails(current)}
+                className="px-5 py-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/90 text-zinc-100 font-semibold flex items-center gap-2 backdrop-blur-md border border-zinc-700/60 transition cursor-pointer"
+              >
+                <Info className="w-5 h-5 text-zinc-300" />
+                <span>Details & Trailer</span>
+              </button>
+            )}
 
             <button
               onClick={() => toggleWatchlist(current)}

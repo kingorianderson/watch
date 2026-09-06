@@ -1,18 +1,24 @@
-export interface StreamServer {
+﻿export interface StreamServer {
   id: string;
   name: string;
   badge?: string;
-  getMovieUrl: (tmdbId: number | string) => string;
-  getTvUrl: (tmdbId: number | string, season: number, episode: number) => string;
+  getMovieUrl: (tmdbId: number | string, startAt?: number) => string;
+  getTvUrl: (tmdbId: number | string, season: number, episode: number, startAt?: number) => string;
 }
 
 export const STREAM_SERVERS: StreamServer[] = [
   {
     id: 'vidlink',
     name: 'Server 1 (VidLink)',
-    badge: '⚡ Low Ads / Fast',
-    getMovieUrl: (id) => `https://vidlink.pro/movie/${id}?primaryColor=ef4444&secondaryColor=18181b`,
-    getTvUrl: (id, s, e) => `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=ef4444&secondaryColor=18181b`,
+    badge: '⚡ Low Ads / Auto-Resume',
+    getMovieUrl: (id, startAt) =>
+      `https://vidlink.pro/movie/${id}?primaryColor=ef4444&secondaryColor=18181b${
+        startAt && startAt > 10 ? `&startAt=${Math.floor(startAt)}` : ''
+      }`,
+    getTvUrl: (id, s, e, startAt) =>
+      `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=ef4444&secondaryColor=18181b${
+        startAt && startAt > 10 ? `&startAt=${Math.floor(startAt)}` : ''
+      }`,
   },
   {
     id: 'embed-su',

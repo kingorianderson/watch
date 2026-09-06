@@ -4,6 +4,7 @@ import { X, Play, Star, Calendar, Clock, Bookmark, Tv, Video } from 'lucide-reac
 import { tmdbService, getBackdropUrl, getPosterUrl, getProfileUrl } from '../services/tmdb';
 import type { MediaItem, CastMember, VideoTrailer } from '../types/media';
 import { useWatchlist } from '../hooks/useWatchlist';
+import { useWatchHistory } from '../hooks/useWatchHistory';
 
 interface MediaDetailsModalProps {
   item: MediaItem | null;
@@ -17,6 +18,7 @@ export default function MediaDetailsModal({ item, onClose }: MediaDetailsModalPr
   const [activeTrailerKey, setActiveTrailerKey] = useState<string | null>(null);
 
   const { toggleWatchlist, isInWatchlist } = useWatchlist();
+  const { getLastWatched } = useWatchHistory();
 
   useEffect(() => {
     if (!item) return;
@@ -67,7 +69,10 @@ export default function MediaDetailsModal({ item, onClose }: MediaDetailsModalPr
   const year = rawDate ? rawDate.substring(0, 4) : '';
   const isTv = current.media_type === 'tv' || (!current.release_date && !!current.first_air_date);
   const isSaved = isInWatchlist(current.id);
-  const playUrl = isTv ? `/watch/tv/${current.id}/1/1` : `/watch/movie/${current.id}`;
+  const lastWatched = getLastWatched(current.id, isTv ? 'tv' : 'movie');
+  const playUrl = isTv
+    ? `/watch/tv/${current.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
+    : `/watch/movie/${current.id}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
@@ -178,8 +183,13 @@ export default function MediaDetailsModal({ item, onClose }: MediaDetailsModalPr
                     onClick={onClose}
                     className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold flex items-center gap-2 shadow-lg shadow-red-600/30 hover:scale-105 transition"
                   >
-                    <Play className="w-4 h-4 fill-white" />
-                    <span>Watch Now</span>
+                    <span>
+                      {lastWatched
+                        ? isTv
+                          ? `Resume S${lastWatched.season || 1}:E${lastWatched.episode || 1}`
+                          : 'Resume Movie'
+                        : 'Watch Now'}
+                    </span>
                   </Link>
 
                   <button
