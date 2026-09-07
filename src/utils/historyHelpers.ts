@@ -51,3 +51,4 @@ export function getEffectiveResumePosition(
   if (isPlaybackPreview(progress, completedFlag)) return 0;
   return Math.floor(progress);
 }
+

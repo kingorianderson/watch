@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Heart,
@@ -6,6 +6,8 @@ import {
   Sparkles,
   Zap,
   CheckCircle2,
+  CreditCard,
+  Smartphone,
 } from 'lucide-react';
 // @ts-ignore
 import PaystackPop from '@paystack/inline-js';
@@ -77,6 +79,7 @@ export default function SupportModal() {
         email: emailToUse,
         amount: Math.round(currentAmount * 100),
         currency: 'KES',
+        channels: ['card', 'mobile_money'],
         metadata: {
           custom_fields: [
             {
@@ -220,6 +223,19 @@ export default function SupportModal() {
                 </div>
               </div>
 
+              {/* Payment Methods Badges */}
+              <div className="flex items-center justify-center gap-3 text-xs text-zinc-400 py-1">
+                <span className="flex items-center gap-1">
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Visa / Mastercard</span>
+                </span>
+                <span className="text-zinc-600">•</span>
+                <span className="flex items-center gap-1">
+                  <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>M-Pesa STK Push</span>
+                </span>
+              </div>
+
               {/* Submit Checkout Button */}
               <button
                 type="submit"
@@ -228,12 +244,14 @@ export default function SupportModal() {
               >
                 <Zap className="w-4 h-4 fill-white" />
                 <span>
-                  Pay KES {currentAmount || 0} with M-Pesa STK Push
+                  {loadingPaystack
+                    ? 'Connecting to Paystack...'
+                    : `Pay KES ${currentAmount || 0} via Card / M-Pesa`}
                 </span>
               </button>
 
               <div className="text-center text-[11px] text-zinc-500">
-                Instant prompt sent to your phone • Enter PIN to confirm
+                Instant popup • Choose Visa, Mastercard, or M-Pesa
               </div>
             </form>
 
