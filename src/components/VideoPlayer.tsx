@@ -48,26 +48,47 @@ export default function VideoPlayer({
 
   const countdownTimerRef = useRef<any>(null);
   const hasTriggeredNextRef = useRef<boolean>(false);
+  const startAtRef = useRef<number>(startAt);
+  startAtRef.current = startAt;
 
-  // When id, season, episode, or server changes, reset loader and playback states
+  // Track the media identity so we ONLY reload when the media or server actually changes
+  const prevMediaKeyRef = useRef<string>('');
+
   useEffect(() => {
-    setIsLoading(true);
-    setActiveStartAt(startAt);
-    setIframeKey((prev) => prev + 1);
-    hasTriggeredNextRef.current = false;
-    setAutoPlayCountdown(null);
-    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    const currentMediaKey = `${tmdbId}_${type}_${season}_${episode}_${currentServer.id}`;
 
-    if (startAt > 15) {
-      setShowResumeToast(true);
-      const timer = setTimeout(() => setShowResumeToast(false), 7000);
-      return () => clearTimeout(timer);
-    } else {
-      setShowResumeToast(false);
+    // Only reload iframe when media or server truly changes
+    if (prevMediaKeyRef.current !== currentMediaKey) {
+      prevMediaKeyRef.current = currentMediaKey;
+      setIsLoading(true);
+
+      const initialTime = startAtRef.current || 0;
+      setActiveStartAt(initialTime);
+      setIframeKey((prev) => prev + 1);
+      hasTriggeredNextRef.current = false;
+      setAutoPlayCountdown(null);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+
+      if (initialTime > 15) {
+        setShowResumeToast(true);
+        const timer = setTimeout(() => setShowResumeToast(false), 7000);
+        return () => clearTimeout(timer);
+      } else {
+        setShowResumeToast(false);
+      }
     }
-  }, [tmdbId, type, season, episode, currentServer, startAt]);
+  }, [tmdbId, type, season, episode, currentServer]);
 
-  // Listen to postMessage events from VidLink
+  // Listen to postMessage events from VidLink without causing iframe re-renders
+  const onProgressUpdateRef = useRef(onProgressUpdate);
+  onProgressUpdateRef.current = onProgressUpdate;
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
+  const onPlayNextEpisodeRef = useRef(onPlayNextEpisode);
+  onPlayNextEpisodeRef.current = onPlayNextEpisode;
+  const nextEpisodeInfoRef = useRef(nextEpisodeInfo);
+  nextEpisodeInfoRef.current = nextEpisodeInfo;
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       // Validate origin from vidlink.pro
@@ -77,13 +98,18 @@ export default function VideoPlayer({
           const { event: eventType, currentTime, duration } = data.data;
 
           if (typeof currentTime === 'number') {
-            onProgressUpdate?.(currentTime, duration || 0);
+            onProgressUpdateRef.current?.(currentTime, duration || 0);
 
             // Trigger auto next episode when finished
             const isNearEnd = duration > 60 && currentTime >= duration - 15;
-            if ((eventType === 'ended' || isNearEnd) && !hasTriggeredNextRef.current && nextEpisodeInfo && onPlayNextEpisode) {
+            if (
+              (eventType === 'ended' || isNearEnd) &&
+              !hasTriggeredNextRef.current &&
+              nextEpisodeInfoRef.current &&
+              onPlayNextEpisodeRef.current
+            ) {
               hasTriggeredNextRef.current = true;
-              onEnded?.();
+              onEndedRef.current?.();
               startAutoPlayCountdown();
             }
           }
@@ -93,7 +119,7 @@ export default function VideoPlayer({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [onProgressUpdate, onEnded, nextEpisodeInfo, onPlayNextEpisode]);
+  }, []);
 
   const startAutoPlayCountdown = () => {
     setAutoPlayCountdown(6);
@@ -103,7 +129,7 @@ export default function VideoPlayer({
       setAutoPlayCountdown((prev) => {
         if (prev === null || prev <= 1) {
           clearInterval(countdownTimerRef.current);
-          if (onPlayNextEpisode) onPlayNextEpisode();
+          if (onPlayNextEpisodeRef.current) onPlayNextEpisodeRef.current();
           return null;
         }
         return prev - 1;
@@ -122,7 +148,9 @@ export default function VideoPlayer({
       : currentServer.getTvUrl(tmdbId, season, episode, activeStartAt);
 
   const handleServerChange = (server: StreamServer) => {
-    setCurrentServer(server);
+    if (server.id !== currentServer.id) {
+      setCurrentServer(server);
+    }
   };
 
   const handleReload = () => {
@@ -205,7 +233,7 @@ export default function VideoPlayer({
               <button
                 onClick={() => {
                   cancelAutoPlay();
-                  if (onPlayNextEpisode) onPlayNextEpisode();
+                  if (onPlayNextEpisodeRef.current) onPlayNextEpisodeRef.current();
                 }}
                 className="flex-1 py-1.5 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-red-600/30 transition cursor-pointer"
               >

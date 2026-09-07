@@ -47,6 +47,7 @@ export function WatchHistoryProvider({ children }: { children: ReactNode }) {
   });
 
   const lastProgressSyncRef = useRef<{ [key: string]: number }>({});
+  const lastStateUpdateRef = useRef<{ [key: string]: number }>({});
 
   // When user signs in or out, sync local + cloud
   useEffect(() => {
@@ -101,7 +102,6 @@ export function WatchHistoryProvider({ children }: { children: ReactNode }) {
             cloudItems.forEach((i) => combinedMap.set(`${i.type}_${i.id}`, i));
             currentList.forEach((i) => {
               const existing = combinedMap.get(`${i.type}_${i.id}`);
-              // Preserve highest timestamp or progress
               if (!existing || (i.timestamp || 0) >= (existing.timestamp || 0)) {
                 combinedMap.set(`${i.type}_${i.id}`, i);
               }
@@ -169,20 +169,28 @@ export function WatchHistoryProvider({ children }: { children: ReactNode }) {
       episode?: number
     ) => {
       const epKey = `watch_progress_${type}_${id}_${season || 1}_${episode || 1}`;
+      const now = Date.now();
+      const itemKey = `${type}_${id}`;
+
       try {
         localStorage.setItem(
           epKey,
-          JSON.stringify({ progress: Math.floor(progress), duration: Math.floor(duration), updatedAt: Date.now() })
+          JSON.stringify({ progress: Math.floor(progress), duration: Math.floor(duration), updatedAt: now })
         );
       } catch {
         // Ignore storage write error
       }
 
-      // Throttle cloud updates to every 10 seconds per item
-      const syncKey = `${type}_${id}`;
-      const now = Date.now();
-      const lastSync = lastProgressSyncRef.current[syncKey] || 0;
-      const shouldSyncCloud = now - lastSync > 10000;
+      // Throttle React state updates to every 8 seconds to prevent high-frequency re-renders during playback
+      const lastStateUpdate = lastStateUpdateRef.current[itemKey] || 0;
+      if (now - lastStateUpdate < 8000) {
+        return;
+      }
+      lastStateUpdateRef.current[itemKey] = now;
+
+      // Throttle cloud updates to every 15 seconds per item
+      const lastSync = lastProgressSyncRef.current[itemKey] || 0;
+      const shouldSyncCloud = now - lastSync > 15000;
 
       setHistory((prev) => {
         const index = prev.findIndex((i) => i.id === id && i.type === type);
@@ -208,7 +216,7 @@ export function WatchHistoryProvider({ children }: { children: ReactNode }) {
         }
 
         if (shouldSyncCloud && user && isSupabaseConfigured()) {
-          lastProgressSyncRef.current[syncKey] = now;
+          lastProgressSyncRef.current[itemKey] = now;
           cloudHistoryService.addToHistory(user.id, updatedItem);
         }
 

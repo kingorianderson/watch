@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Star,
@@ -46,15 +46,18 @@ export default function WatchPage() {
   const { addToHistory, updateProgress, getLastWatched, getEpisodeProgress } = useWatchHistory();
   const { toggleWatchlist, isInWatchlist } = useWatchlist();
 
+  const getLastWatchedRef = useRef(getLastWatched);
+  getLastWatchedRef.current = getLastWatched;
+
   // If user visits /watch/tv/:id without season/episode in URL, resume last watched season/episode
   useEffect(() => {
     if (mediaType === 'tv' && id && (!season || !episode)) {
-      const lastWatched = getLastWatched(Number(id), 'tv');
+      const lastWatched = getLastWatchedRef.current(Number(id), 'tv');
       const targetSeason = lastWatched?.season || 1;
       const targetEpisode = lastWatched?.episode || 1;
       navigate(`/watch/tv/${id}/${targetSeason}/${targetEpisode}`, { replace: true });
     }
-  }, [id, mediaType, season, episode, getLastWatched, navigate]);
+  }, [id, mediaType, season, episode, navigate]);
 
   useEffect(() => {
     if (!id) return;
@@ -200,14 +203,17 @@ export default function WatchPage() {
     setTimeout(() => setCopied(false), 2500);
   };
 
-  // Get initial start time for playback
-  const savedEpisodeProgress = getEpisodeProgress(
-    Number(id),
-    mediaType,
-    mediaType === 'tv' ? currentSeason : 1,
-    mediaType === 'tv' ? currentEpisode : 1
-  );
-  const initialStartAt = savedEpisodeProgress?.progress || 0;
+  // Get initial start time for playback - computed ONLY when the media/episode changes
+  const initialStartAt = useMemo(() => {
+    const saved = getEpisodeProgress(
+      Number(id),
+      mediaType,
+      mediaType === 'tv' ? currentSeason : 1,
+      mediaType === 'tv' ? currentEpisode : 1
+    );
+    return saved?.progress || 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, mediaType, currentSeason, currentEpisode]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white pt-20 pb-24">
