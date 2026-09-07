@@ -71,6 +71,7 @@ export interface WatchHistoryItem {
   timestamp: number;
   progress?: number; // playback position in seconds
   duration?: number; // total duration in seconds
+  completed?: boolean;
 }
 
 export interface WatchlistItem {

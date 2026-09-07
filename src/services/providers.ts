@@ -1,4 +1,6 @@
-﻿export interface StreamServer {
+import { PREVIEW_THRESHOLD_SECONDS } from '../utils/historyHelpers';
+
+export interface StreamServer {
   id: string;
   name: string;
   badge?: string;
@@ -13,11 +15,11 @@ export const STREAM_SERVERS: StreamServer[] = [
     badge: '⚡ Low Ads / Auto-Resume',
     getMovieUrl: (id, startAt) =>
       `https://vidlink.pro/movie/${id}?primaryColor=ef4444&secondaryColor=18181b${
-        startAt && startAt > 10 ? `&startAt=${Math.floor(startAt)}` : ''
+        startAt && startAt > PREVIEW_THRESHOLD_SECONDS ? `&startAt=${Math.floor(startAt)}` : ''
       }`,
     getTvUrl: (id, s, e, startAt) =>
       `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=ef4444&secondaryColor=18181b${
-        startAt && startAt > 10 ? `&startAt=${Math.floor(startAt)}` : ''
+        startAt && startAt > PREVIEW_THRESHOLD_SECONDS ? `&startAt=${Math.floor(startAt)}` : ''
       }`,
   },
   {

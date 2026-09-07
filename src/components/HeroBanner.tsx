@@ -5,6 +5,7 @@ import { getBackdropUrl } from '../services/tmdb';
 import type { MediaItem } from '../types/media';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { useWatchHistory } from '../hooks/useWatchHistory';
+import { isPlaybackCompleted, isPlaybackPreview } from '../utils/historyHelpers';
 
 interface HeroBannerProps {
   items: MediaItem[];
@@ -35,6 +36,10 @@ export default function HeroBanner({ items, onOpenDetails }: HeroBannerProps) {
   const isSaved = isInWatchlist(current.id);
 
   const lastWatched = getLastWatched(current.id, isTv ? 'tv' : 'movie');
+  const isCompleted = isPlaybackCompleted(lastWatched?.progress, lastWatched?.duration, isTv ? 'tv' : 'movie', lastWatched?.completed);
+  const isPreview = isPlaybackPreview(lastWatched?.progress, isCompleted);
+  const hasActiveResume = Boolean(lastWatched && !isCompleted && !isPreview && lastWatched.progress && lastWatched.progress > 180);
+
   const playUrl = isTv
     ? `/watch/tv/${current.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
     : `/watch/movie/${current.id}`;
@@ -98,10 +103,12 @@ export default function HeroBanner({ items, onOpenDetails }: HeroBannerProps) {
             >
               <Play className="w-5 h-5 fill-white" />
               <span>
-                {lastWatched
+                {hasActiveResume
                   ? isTv
-                    ? `Resume S${lastWatched.season || 1}:E${lastWatched.episode || 1}`
+                    ? `Resume S${lastWatched?.season || 1}:E${lastWatched?.episode || 1}`
                     : 'Resume Movie'
+                  : isCompleted
+                  ? 'Watch Again'
                   : 'Watch Now'}
               </span>
             </Link>

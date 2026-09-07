@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bookmark, History, Trash2, Play, Star } from 'lucide-react';
+import { Bookmark, History, Trash2, Play, Star, CheckCircle2 } from 'lucide-react';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { useWatchHistory } from '../hooks/useWatchHistory';
 import { getPosterUrl } from '../services/tmdb';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import type { MediaItem } from '../types/media';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { isPlaybackCompleted, isPlaybackPreview } from '../utils/historyHelpers';
 
 export default function WatchlistPage() {
   usePageTitle('My Library');
@@ -158,13 +159,18 @@ export default function WatchlistPage() {
                     ? `/watch/tv/${item.id}/${item.season || 1}/${item.episode || 1}`
                     : `/watch/movie/${item.id}`;
 
+                const isCompleted = isPlaybackCompleted(item.progress, item.duration, item.type, item.completed);
+                const isPreview = isPlaybackPreview(item.progress, isCompleted);
+
                 const progressPct =
-                  item.progress && item.duration && item.duration > 0
+                  isCompleted
+                    ? 100
+                    : !isPreview && item.progress && item.duration && item.duration > 0
                     ? Math.min(100, Math.round((item.progress / item.duration) * 100))
                     : 0;
 
                 const timeLeft =
-                  item.progress && item.duration && item.duration > item.progress
+                  !isCompleted && !isPreview && item.progress && item.duration && item.duration > item.progress
                     ? Math.max(1, Math.round((item.duration - item.progress) / 60))
                     : null;
 
@@ -186,14 +192,18 @@ export default function WatchlistPage() {
                         </span>
                       )}
                       {/* Progress Bar */}
-                      {progressPct > 0 && (
+                      {isCompleted ? (
+                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800/90">
+                          <div className="h-full bg-emerald-500 w-full" />
+                        </div>
+                      ) : progressPct > 0 ? (
                         <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800/90">
                           <div
                             className="h-full bg-gradient-to-r from-red-600 to-amber-500"
                             style={{ width: `${progressPct}%` }}
                           />
                         </div>
-                      )}
+                      ) : null}
                     </div>
 
                     <div className="flex-1 min-w-0">
@@ -206,7 +216,14 @@ export default function WatchlistPage() {
                             ? `Season ${item.season || 1} • Ep ${item.episode || 1}`
                             : 'Movie'}
                         </span>
-                        {timeLeft ? (
+                        {isCompleted ? (
+                          <span className="text-emerald-400 font-mono font-medium flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>• Watched</span>
+                          </span>
+                        ) : isPreview ? (
+                          <span className="text-zinc-400 font-mono">• Previewed</span>
+                        ) : timeLeft ? (
                           <span className="text-amber-400 font-mono font-medium">• {timeLeft}m left</span>
                         ) : progressPct > 0 ? (
                           <span className="text-emerald-400 font-mono">• {progressPct}%</span>
@@ -218,7 +235,11 @@ export default function WatchlistPage() {
                       >
                         <Play className="w-3 h-3 fill-current" />
                         <span>
-                          {item.type === 'tv' && item.season
+                          {isCompleted
+                            ? 'Watch Again'
+                            : isPreview
+                            ? 'Watch'
+                            : item.type === 'tv' && item.season
                             ? `Resume S${item.season}:E${item.episode || 1}`
                             : 'Resume'}
                         </span>

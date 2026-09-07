@@ -1,10 +1,11 @@
-﻿import React from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Star, Bookmark, Info, RotateCcw } from 'lucide-react';
 import { getPosterUrl } from '../services/tmdb';
 import type { MediaItem } from '../types/media';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { useWatchHistory } from '../hooks/useWatchHistory';
+import { isPlaybackCompleted, isPlaybackPreview } from '../utils/historyHelpers';
 
 interface MediaCardProps {
   item: MediaItem;
@@ -27,10 +28,17 @@ export default function MediaCard({ item, onOpenDetails }: MediaCardProps) {
     ? `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
     : `/watch/movie/${item.id}`;
 
+  const isCompleted = isPlaybackCompleted(lastWatched?.progress, lastWatched?.duration, isTv ? 'tv' : 'movie', lastWatched?.completed);
+  const isPreview = isPlaybackPreview(lastWatched?.progress, isCompleted);
+
   const progressPercent =
-    lastWatched?.progress && lastWatched?.duration && lastWatched.duration > 0
+    isCompleted
+      ? 100
+      : !isPreview && lastWatched?.progress && lastWatched?.duration && lastWatched.duration > 0
       ? Math.min(100, Math.round((lastWatched.progress / lastWatched.duration) * 100))
       : 0;
+
+  const hasActiveResume = Boolean(lastWatched && !isCompleted && !isPreview && progressPercent > 5);
 
   const handleBookmarkClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -91,23 +99,35 @@ export default function MediaCard({ item, onOpenDetails }: MediaCardProps) {
         </div>
 
         {/* Playback Progress Bar */}
-        {progressPercent > 0 && (
+        {isCompleted ? (
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800/90 z-20">
+            <div className="h-full bg-emerald-500 w-full" />
+          </div>
+        ) : progressPercent > 0 ? (
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800/90 z-20">
             <div
               className="h-full bg-gradient-to-r from-red-600 to-amber-500 transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-        )}
+        ) : null}
 
         {/* Hover Overlay with Quick Action Buttons */}
         <div className="absolute inset-0 z-10 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3 pointer-events-none group-hover:pointer-events-auto">
           <Link
             to={playUrl}
             className="w-12 h-12 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-lg shadow-red-600/50 transform scale-90 group-hover:scale-100 transition duration-300 cursor-pointer"
-            title={isTv && lastWatched ? `Resume S${lastWatched.season}:E${lastWatched.episode}` : 'Watch Now'}
+            title={
+              hasActiveResume
+                ? isTv && lastWatched?.season
+                  ? `Resume S${lastWatched.season}:E${lastWatched.episode}`
+                  : 'Resume'
+                : isCompleted
+                ? 'Watch Again'
+                : 'Watch Now'
+            }
           >
-            {lastWatched && progressPercent > 5 ? (
+            {hasActiveResume ? (
               <RotateCcw className="w-5 h-5 text-white" />
             ) : (
               <Play className="w-6 h-6 fill-white ml-0.5" />

@@ -5,6 +5,7 @@ import { tmdbService, getBackdropUrl, getPosterUrl, getProfileUrl } from '../ser
 import type { MediaItem, CastMember, VideoTrailer } from '../types/media';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { useWatchHistory } from '../hooks/useWatchHistory';
+import { isPlaybackCompleted, isPlaybackPreview } from '../utils/historyHelpers';
 
 interface MediaDetailsModalProps {
   item: MediaItem | null;
@@ -70,6 +71,10 @@ export default function MediaDetailsModal({ item, onClose }: MediaDetailsModalPr
   const isTv = current.media_type === 'tv' || (!current.release_date && !!current.first_air_date);
   const isSaved = isInWatchlist(current.id);
   const lastWatched = getLastWatched(current.id, isTv ? 'tv' : 'movie');
+  const isCompleted = isPlaybackCompleted(lastWatched?.progress, lastWatched?.duration, isTv ? 'tv' : 'movie', lastWatched?.completed);
+  const isPreview = isPlaybackPreview(lastWatched?.progress, isCompleted);
+  const hasActiveResume = Boolean(lastWatched && !isCompleted && !isPreview && lastWatched.progress && lastWatched.progress > 180);
+
   const playUrl = isTv
     ? `/watch/tv/${current.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
     : `/watch/movie/${current.id}`;
@@ -184,10 +189,12 @@ export default function MediaDetailsModal({ item, onClose }: MediaDetailsModalPr
                     className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold flex items-center gap-2 shadow-lg shadow-red-600/30 hover:scale-105 transition"
                   >
                     <span>
-                      {lastWatched
+                      {hasActiveResume
                         ? isTv
-                          ? `Resume S${lastWatched.season || 1}:E${lastWatched.episode || 1}`
+                          ? `Resume S${lastWatched?.season || 1}:E${lastWatched?.episode || 1}`
                           : 'Resume Movie'
+                        : isCompleted
+                        ? 'Watch Again'
                         : 'Watch Now'}
                     </span>
                   </Link>

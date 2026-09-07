@@ -1,9 +1,10 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, Layers, CheckCircle2 } from 'lucide-react';
 import { tmdbService, getBackdropUrl } from '../services/tmdb';
 import type { Episode, SeasonSummary } from '../types/media';
 import { useWatchHistory } from '../hooks/useWatchHistory';
+import { isPlaybackCompleted, isPlaybackPreview } from '../utils/historyHelpers';
 
 interface EpisodePickerProps {
   tvId: number | string;
@@ -113,12 +114,20 @@ export default function EpisodePicker({
               ep.episode_number
             );
 
+            const isCompleted = isPlaybackCompleted(
+              progressInfo?.progress,
+              progressInfo?.duration,
+              'tv',
+              progressInfo?.completed
+            );
+            const isPreview = isPlaybackPreview(progressInfo?.progress, isCompleted);
+
             const progressPct =
-              progressInfo?.progress && progressInfo?.duration && progressInfo.duration > 0
+              !isCompleted && !isPreview && progressInfo?.progress && progressInfo?.duration && progressInfo.duration > 0
                 ? Math.min(100, Math.round((progressInfo.progress / progressInfo.duration) * 100))
                 : 0;
 
-            const isWatched = progressPct >= 85;
+            const isWatched = isCompleted || progressPct >= 85;
 
             return (
               <button

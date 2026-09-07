@@ -1,7 +1,19 @@
-﻿import { createContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import type { WatchHistoryItem } from '../types/media';
 import { useAuth } from './AuthContext';
 import { cloudHistoryService, isSupabaseConfigured } from '../services/supabase';
+import {
+  isPlaybackCompleted,
+  getEffectiveResumePosition,
+} from '../utils/historyHelpers';
+
+export interface EpisodeProgressData {
+  progress: number;
+  duration: number;
+  completed?: boolean;
+  resumeProgress?: number;
+  updatedAt?: number;
+}
 
 export interface WatchHistoryContextType {
   history: WatchHistoryItem[];
@@ -20,7 +32,7 @@ export interface WatchHistoryContextType {
     type: 'movie' | 'tv',
     season?: number,
     episode?: number
-  ) => { progress: number; duration: number } | null;
+  ) => EpisodeProgressData | null;
   removeFromHistory: (id: number, type: 'movie' | 'tv') => void;
   clearHistory: () => void;
 }
@@ -168,14 +180,23 @@ export function WatchHistoryProvider({ children }: { children: ReactNode }) {
       season?: number,
       episode?: number
     ) => {
-      const epKey = `watch_progress_${type}_${id}_${season || 1}_${episode || 1}`;
       const now = Date.now();
       const itemKey = `${type}_${id}`;
+      const epKey = `watch_progress_${type}_${id}_${season || 1}_${episode || 1}`;
+
+      const isFinished = isPlaybackCompleted(progress, duration, type);
+      const resumeProgress = getEffectiveResumePosition(progress, duration, type, isFinished);
 
       try {
         localStorage.setItem(
           epKey,
-          JSON.stringify({ progress: Math.floor(progress), duration: Math.floor(duration), updatedAt: now })
+          JSON.stringify({
+            progress: Math.floor(progress),
+            duration: Math.floor(duration),
+            completed: isFinished,
+            resumeProgress,
+            updatedAt: now,
+          })
         );
       } catch {
         // Ignore storage write error
@@ -201,6 +222,7 @@ export function WatchHistoryProvider({ children }: { children: ReactNode }) {
           ...currentItem,
           progress: Math.floor(progress),
           duration: Math.floor(duration),
+          completed: isFinished,
           season: type === 'tv' ? season ?? currentItem.season : undefined,
           episode: type === 'tv' ? episode ?? currentItem.episode : undefined,
           timestamp: now,
@@ -239,7 +261,14 @@ export function WatchHistoryProvider({ children }: { children: ReactNode }) {
         const epKey = `watch_progress_${type}_${id}_${season}_${episode}`;
         const stored = localStorage.getItem(epKey);
         if (stored) {
-          return JSON.parse(stored);
+          const parsed = JSON.parse(stored);
+          const completed = isPlaybackCompleted(parsed.progress, parsed.duration, type, parsed.completed);
+          const resumeProgress = getEffectiveResumePosition(parsed.progress, parsed.duration, type, completed);
+          return {
+            ...parsed,
+            completed,
+            resumeProgress,
+          };
         }
       } catch {
         // Ignore

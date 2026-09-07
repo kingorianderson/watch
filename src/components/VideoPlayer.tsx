@@ -1,6 +1,7 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Server, RefreshCw, Sparkles, Info, Play, RotateCcw, X } from 'lucide-react';
 import { STREAM_SERVERS, type StreamServer } from '../services/providers';
+import { PREVIEW_THRESHOLD_SECONDS, isPlaybackCompleted } from '../utils/historyHelpers';
 
 interface VideoPlayerProps {
   tmdbId: number | string;
@@ -62,14 +63,15 @@ export default function VideoPlayer({
       prevMediaKeyRef.current = currentMediaKey;
       setIsLoading(true);
 
-      const initialTime = startAtRef.current || 0;
+      // Only resume if beyond 3-minute preview threshold (180s)
+      const initialTime = (startAtRef.current && startAtRef.current > PREVIEW_THRESHOLD_SECONDS) ? startAtRef.current : 0;
       setActiveStartAt(initialTime);
       setIframeKey((prev) => prev + 1);
       hasTriggeredNextRef.current = false;
       setAutoPlayCountdown(null);
       if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
 
-      if (initialTime > 15) {
+      if (initialTime > PREVIEW_THRESHOLD_SECONDS) {
         setShowResumeToast(true);
         const timer = setTimeout(() => setShowResumeToast(false), 7000);
         return () => clearTimeout(timer);
@@ -100,10 +102,12 @@ export default function VideoPlayer({
           if (typeof currentTime === 'number') {
             onProgressUpdateRef.current?.(currentTime, duration || 0);
 
-            // Trigger auto next episode when finished
-            const isNearEnd = duration > 60 && currentTime >= duration - 15;
+            // Outro threshold: last 3 mins (180s) for TV series, last 4 mins (240s) for movies
+            const isOutro = isPlaybackCompleted(currentTime, duration || 0, type);
+
+            // Trigger auto next episode when finished or during outro credits
             if (
-              (eventType === 'ended' || isNearEnd) &&
+              (eventType === 'ended' || isOutro) &&
               !hasTriggeredNextRef.current &&
               nextEpisodeInfoRef.current &&
               onPlayNextEpisodeRef.current

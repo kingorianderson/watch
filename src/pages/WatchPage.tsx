@@ -96,6 +96,7 @@ export default function WatchPage() {
             episode: mediaType === 'tv' ? currentEpisode : undefined,
             progress: savedProgress?.progress,
             duration: savedProgress?.duration,
+            completed: savedProgress?.completed,
           });
         }
       } catch (err) {
@@ -211,7 +212,7 @@ export default function WatchPage() {
       mediaType === 'tv' ? currentSeason : 1,
       mediaType === 'tv' ? currentEpisode : 1
     );
-    return saved?.progress || 0;
+    return saved?.resumeProgress ?? (saved?.progress && saved.progress > 180 ? saved.progress : 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, mediaType, currentSeason, currentEpisode]);
 

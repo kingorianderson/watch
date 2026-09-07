@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Flame, Film, Tv, Trophy, Zap, Rocket, Sparkles, Smile, Ghost, History, Play } from 'lucide-react';
+import { Flame, Film, Tv, Trophy, Zap, Rocket, Sparkles, Smile, Ghost, History, Play, CheckCircle2 } from 'lucide-react';
 import { tmdbService, getPosterUrl } from '../services/tmdb';
 import type { MediaItem } from '../types/media';
 import HeroBanner from '../components/HeroBanner';
@@ -8,6 +8,7 @@ import MediaRow from '../components/MediaRow';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import { useWatchHistory } from '../hooks/useWatchHistory';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { isPlaybackCompleted, isPlaybackPreview } from '../utils/historyHelpers';
 
 export default function HomePage() {
   usePageTitle('Home');
@@ -87,13 +88,18 @@ export default function HomePage() {
                   ? `/watch/tv/${item.id}/${item.season || 1}/${item.episode || 1}`
                   : `/watch/movie/${item.id}`;
 
+              const isCompleted = isPlaybackCompleted(item.progress, item.duration, item.type, item.completed);
+              const isPreview = isPlaybackPreview(item.progress, isCompleted);
+
               const progressPct =
-                item.progress && item.duration && item.duration > 0
+                isCompleted
+                  ? 100
+                  : !isPreview && item.progress && item.duration && item.duration > 0
                   ? Math.min(100, Math.round((item.progress / item.duration) * 100))
                   : 0;
 
               const timeLeft =
-                item.progress && item.duration && item.duration > item.progress
+                !isCompleted && !isPreview && item.progress && item.duration && item.duration > item.progress
                   ? Math.max(1, Math.round((item.duration - item.progress) / 60))
                   : null;
 
@@ -131,14 +137,18 @@ export default function HomePage() {
                     </div>
 
                     {/* Progress Bar */}
-                    {progressPct > 0 && (
+                    {isCompleted ? (
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800/90 z-20">
+                        <div className="h-full bg-emerald-500 w-full" />
+                      </div>
+                    ) : progressPct > 0 ? (
                       <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800/90 z-20">
                         <div
                           className="h-full bg-gradient-to-r from-red-600 to-amber-500"
                           style={{ width: `${progressPct}%` }}
                         />
                       </div>
-                    )}
+                    ) : null}
                   </div>
 
                   <div className="p-3">
@@ -151,7 +161,14 @@ export default function HomePage() {
                           ? `S${item.season || 1} • Ep ${item.episode || 1}`
                           : 'Movie'}
                       </span>
-                      {timeLeft ? (
+                      {isCompleted ? (
+                        <span className="text-[11px] text-emerald-400 font-mono font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Watched</span>
+                        </span>
+                      ) : isPreview ? (
+                        <span className="text-[11px] text-zinc-400 font-mono">Previewed</span>
+                      ) : timeLeft ? (
                         <span className="text-[11px] text-amber-400 font-mono">{timeLeft}m left</span>
                       ) : progressPct > 0 ? (
                         <span className="text-[11px] text-emerald-400 font-mono">{progressPct}%</span>
