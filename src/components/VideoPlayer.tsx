@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Server, RefreshCw, Sparkles, Info, Play, RotateCcw, X } from 'lucide-react';
 import { STREAM_SERVERS, type StreamServer } from '../services/providers';
-import { PREVIEW_THRESHOLD_SECONDS, isPlaybackCompleted } from '../utils/historyHelpers';
+import { PREVIEW_THRESHOLD_SECONDS } from '../utils/historyHelpers';
 
 interface VideoPlayerProps {
   tmdbId: number | string;
@@ -102,12 +102,11 @@ export default function VideoPlayer({
           if (typeof currentTime === 'number') {
             onProgressUpdateRef.current?.(currentTime, duration || 0);
 
-            // Outro threshold: last 3 mins (180s) for TV series, last 4 mins (240s) for movies
-            const isOutro = isPlaybackCompleted(currentTime, duration || 0, type);
+            // Only trigger auto next episode when the episode is 100% complete
+            const is100PercentComplete = eventType === 'ended' || (duration > 30 && currentTime >= duration - 2);
 
-            // Trigger auto next episode when finished or during outro credits
             if (
-              (eventType === 'ended' || isOutro) &&
+              is100PercentComplete &&
               !hasTriggeredNextRef.current &&
               nextEpisodeInfoRef.current &&
               onPlayNextEpisodeRef.current
