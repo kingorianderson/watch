@@ -68,7 +68,7 @@ export default function SupportModal() {
       return;
     }
 
-    const emailToUse = (user?.email || `supporter_${Date.now()}@watch.kingori.co.ke`).trim();
+    const emailToUse = (user?.email || `supporter_${Date.now()}@gmail.com`).trim();
 
     setLoadingPaystack(true);
 
@@ -85,12 +85,12 @@ export default function SupportModal() {
             {
               display_name: 'Supporter Name',
               variable_name: 'supporter_name',
-              value: user?.name || 'Anonymous Supporter',
+              value: user?.name || 'Supporter',
             },
             {
-              display_name: 'Platform',
-              variable_name: 'platform',
-              value: 'WATCHD Streaming',
+              display_name: 'Service',
+              variable_name: 'service_type',
+              value: 'Digital Services & Creative Support',
             },
           ],
         },
