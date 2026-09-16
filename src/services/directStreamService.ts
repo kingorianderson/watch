@@ -1,11 +1,11 @@
 /**
  * Direct HLS Stream Resolver Service
- * Provides direct .m3u8 master playlist streams, multiple resolutions (4K, 1080p, 720p),
- * and subtitle tracks for zero-ad native video playback.
+ * Communicates with Cloudflare Worker / FebBox Stream Resolver
+ * for zero-ad native 4K HLS video playback.
  */
 
 export interface StreamQuality {
-  label: string; // '4K HDR', '1080p FHD', '720p HD', '480p SD', 'Auto'
+  label: string; // '4K Ultra HD', '1080p FHD', '720p HD', 'Auto'
   url: string;
   isDefault?: boolean;
 }
@@ -24,6 +24,10 @@ export interface DirectStreamResult {
   sourceName: string;
 }
 
+const STREAM_RESOLVER_ENDPOINT =
+  import.meta.env.VITE_STREAM_RESOLVER_URL ||
+  'https://febbox-resolver.kingori.workers.dev/api/stream';
+
 export const directStreamService = {
   /**
    * Resolves direct HLS stream sources for a given movie or TV episode
@@ -35,47 +39,69 @@ export const directStreamService = {
     episode: number = 1
   ): Promise<DirectStreamResult | null> {
     try {
-      // Primary High-Speed Direct Stream Resolver Endpoints
       const isTv = type === 'tv';
-      
-      // Multi-CDN HLS Stream Sources (Cineby / MovieBox / FebBox / SuperStream CDN cluster)
+      const queryParams = new URLSearchParams({
+        tmdbId: String(tmdbId),
+        type,
+        ...(isTv ? { season: String(season), episode: String(episode) } : {}),
+      });
+
+      // Try fetching from configured Cloudflare Worker resolver first
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      try {
+        const res = await fetch(`${STREAM_RESOLVER_ENDPOINT}?${queryParams.toString()}`, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
+
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.qualities) && data.qualities.length > 0) {
+            return {
+              qualities: data.qualities,
+              subtitles: data.subtitles || [],
+              sourceName: data.sourceName || 'FebBox Direct 4K HLS',
+            };
+          }
+        }
+      } catch {
+        // Worker endpoint fallback or network timeout
+      }
+
+      // Default high-speed HLS cluster fallback
       const streamUrls: StreamQuality[] = isTv
         ? [
             {
               label: '1080p FHD',
-              url: `https://vidsrc.stream/hls/tv/${tmdbId}/${season}/${episode}/master.m3u8`,
+              url: `https://info.movieboxnoob.cc/video/${tmdbId}/tv_${season}_${episode}_1080p.m3u8`,
               isDefault: true,
             },
             {
               label: '720p HD',
-              url: `https://vidsrc.stream/hls/tv/${tmdbId}/${season}/${episode}/720p.m3u8`,
+              url: `https://info.movieboxnoob.cc/video/${tmdbId}/tv_${season}_${episode}_720p.m3u8`,
             },
             {
               label: '4K Ultra HD',
-              url: `https://vidsrc.stream/hls/tv/${tmdbId}/${season}/${episode}/4k.m3u8`,
-            },
-            {
-              label: 'Auto (Adaptive)',
-              url: `https://vidsrc.stream/hls/tv/${tmdbId}/${season}/${episode}/index.m3u8`,
+              url: `https://info.movieboxnoob.cc/video/${tmdbId}/tv_${season}_${episode}_4k.m3u8`,
             },
           ]
         : [
             {
               label: '1080p FHD',
-              url: `https://vidsrc.stream/hls/movie/${tmdbId}/master.m3u8`,
+              url: `https://info.movieboxnoob.cc/video/${tmdbId}/video_1080p.m3u8`,
               isDefault: true,
             },
             {
               label: '720p HD',
-              url: `https://vidsrc.stream/hls/movie/${tmdbId}/720p.m3u8`,
+              url: `https://info.movieboxnoob.cc/video/${tmdbId}/video_720p.m3u8`,
             },
             {
               label: '4K Ultra HD',
-              url: `https://vidsrc.stream/hls/movie/${tmdbId}/4k.m3u8`,
-            },
-            {
-              label: 'Auto (Adaptive)',
-              url: `https://vidsrc.stream/hls/movie/${tmdbId}/index.m3u8`,
+              url: `https://info.movieboxnoob.cc/video/${tmdbId}/video_4k_hdr.m3u8`,
             },
           ];
 
@@ -106,7 +132,7 @@ export const directStreamService = {
       return {
         qualities: streamUrls,
         subtitles,
-        sourceName: 'Direct 4K HLS (Zero Ads)',
+        sourceName: 'FebBox Direct 4K (Zero Ads)',
       };
     } catch (err) {
       console.warn('Failed to resolve direct HLS stream:', err);
@@ -114,4 +140,3 @@ export const directStreamService = {
     }
   },
 };
-
