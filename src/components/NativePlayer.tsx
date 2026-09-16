@@ -403,7 +403,7 @@ export default function NativePlayer({
           <div className="max-w-md space-y-1">
             <h3 className="text-lg font-bold text-white">Direct Stream Temporarily Unavailable</h3>
             <p className="text-xs text-zinc-400">
-              The direct HLS stream is currently unavailable. Switch to Server 1 (VidLink) to watch instantly in HD.
+              The direct HLS stream is currently unavailable. Switch to Server 2 (VidLink) to watch instantly in HD.
             </p>
           </div>
           <div className="flex items-center gap-3 pt-2">
@@ -412,7 +412,7 @@ export default function NativePlayer({
                 onClick={onSwitchToBackup}
                 className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-600/30 transition cursor-pointer"
               >
-                Switch to Server 1 (VidLink)
+                Switch to Server 2 (VidLink)
               </button>
             )}
             <button
