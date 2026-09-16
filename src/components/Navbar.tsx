@@ -16,6 +16,7 @@ import {
   Trash2,
   ArrowLeft,
   Heart,
+  Trophy,
 } from 'lucide-react';
 import { tmdbService, getPosterUrl } from '../services/tmdb';
 import type { MediaItem } from '../types/media';
@@ -215,6 +216,7 @@ export default function Navbar() {
 
   const navLinks = [
     { name: 'Home', path: '/' },
+    { name: 'Live Sports', path: '/sports', icon: Trophy, isLive: true },
     { name: 'Movies', path: '/movies', icon: Film },
     { name: 'TV Series', path: '/series', icon: Tv },
     { name: 'Watchlist', path: '/watchlist', icon: Bookmark, count: watchlist.length },
@@ -255,8 +257,14 @@ export default function Navbar() {
                         : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
                     }`}
                   >
-                    {link.icon && <link.icon className="w-4 h-4" />}
+                    {link.icon && <link.icon className={`w-4 h-4 ${link.isLive ? 'text-red-500' : ''}`} />}
                     <span>{link.name}</span>
+                    {link.isLive && (
+                      <span className="flex h-2 w-2 relative ml-0.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      </span>
+                    )}
                     {link.count !== undefined && link.count > 0 && (
                       <span className="px-1.5 py-0.5 bg-red-600/30 text-red-400 rounded-full text-[10px] font-mono font-bold leading-none">
                         {link.count}
@@ -517,6 +525,12 @@ export default function Navbar() {
                     {link.icon && <link.icon className={`w-4 h-4 ${isActive ? 'text-red-400' : 'text-zinc-400'}`} />}
                     <span>{link.name}</span>
                   </div>
+                  {link.isLive && (
+                    <span className="px-2 py-0.5 bg-red-600/20 text-red-400 border border-red-500/30 rounded-full text-[10px] font-mono font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                      <span>LIVE</span>
+                    </span>
+                  )}
                   {link.count !== undefined && link.count > 0 && (
                     <span className="px-2 py-0.5 bg-red-600/30 text-red-400 rounded-full text-xs font-mono font-bold">
                       {link.count}

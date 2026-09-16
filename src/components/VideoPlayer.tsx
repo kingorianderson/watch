@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Server, RefreshCw, Sparkles, Info, Play, RotateCcw, X } from 'lucide-react';
 import { STREAM_SERVERS, type StreamServer } from '../services/providers';
+import { directStreamService, type DirectStreamResult } from '../services/directStreamService';
+import NativePlayer from './NativePlayer';
 import { PREVIEW_THRESHOLD_SECONDS } from '../utils/historyHelpers';
 
 interface VideoPlayerProps {
@@ -46,6 +48,7 @@ export default function VideoPlayer({
   const [activeStartAt, setActiveStartAt] = useState<number>(startAt);
   const [showResumeToast, setShowResumeToast] = useState<boolean>(false);
   const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null);
+  const [directStreamData, setDirectStreamData] = useState<DirectStreamResult | null>(null);
 
   const countdownTimerRef = useRef<any>(null);
   const hasTriggeredNextRef = useRef<boolean>(false);
@@ -58,13 +61,16 @@ export default function VideoPlayer({
   useEffect(() => {
     const currentMediaKey = `${tmdbId}_${type}_${season}_${episode}_${currentServer.id}`;
 
-    // Only reload iframe when media or server truly changes
+    // Only reload when media or server truly changes
     if (prevMediaKeyRef.current !== currentMediaKey) {
       prevMediaKeyRef.current = currentMediaKey;
       setIsLoading(true);
 
       // Only resume if beyond 3-minute preview threshold (180s)
-      const initialTime = (startAtRef.current && startAtRef.current > PREVIEW_THRESHOLD_SECONDS) ? startAtRef.current : 0;
+      const initialTime =
+        startAtRef.current && startAtRef.current > PREVIEW_THRESHOLD_SECONDS
+          ? startAtRef.current
+          : 0;
       setActiveStartAt(initialTime);
       setIframeKey((prev) => prev + 1);
       hasTriggeredNextRef.current = false;
@@ -78,6 +84,31 @@ export default function VideoPlayer({
       } else {
         setShowResumeToast(false);
       }
+    }
+  }, [tmdbId, type, season, episode, currentServer]);
+
+  // Resolve direct HLS stream metadata when Server 1 is active
+  useEffect(() => {
+    if (currentServer.isNativeHls) {
+      let isMounted = true;
+      directStreamService
+        .getDirectStream(tmdbId, type, season, episode)
+        .then((res) => {
+          if (isMounted) {
+            setDirectStreamData(res);
+            setIsLoading(false);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setIsLoading(false);
+          }
+        });
+      return () => {
+        isMounted = false;
+      };
+    } else {
+      setDirectStreamData(null);
     }
   }, [tmdbId, type, season, episode, currentServer]);
 
@@ -103,7 +134,8 @@ export default function VideoPlayer({
             onProgressUpdateRef.current?.(currentTime, duration || 0);
 
             // Only trigger auto next episode when the episode is 100% complete
-            const is100PercentComplete = eventType === 'ended' || (duration > 30 && currentTime >= duration - 2);
+            const is100PercentComplete =
+              eventType === 'ended' || (duration > 30 && currentTime >= duration - 2);
 
             if (
               is100PercentComplete &&
@@ -145,6 +177,40 @@ export default function VideoPlayer({
     setAutoPlayCountdown(null);
   };
 
+  // Handlers for NativePlayer
+  const handleNativeProgress = (currentTime: number, duration: number) => {
+    onProgressUpdateRef.current?.(currentTime, duration);
+
+    // Trigger auto next episode strictly when 100% complete (last 2 seconds)
+    const is100PercentComplete = duration > 30 && currentTime >= duration - 2;
+    if (
+      is100PercentComplete &&
+      !hasTriggeredNextRef.current &&
+      nextEpisodeInfoRef.current &&
+      onPlayNextEpisodeRef.current
+    ) {
+      hasTriggeredNextRef.current = true;
+      onEndedRef.current?.();
+      startAutoPlayCountdown();
+    }
+  };
+
+  const handleNativeEnded = () => {
+    if (
+      !hasTriggeredNextRef.current &&
+      nextEpisodeInfoRef.current &&
+      onPlayNextEpisodeRef.current
+    ) {
+      hasTriggeredNextRef.current = true;
+      onEndedRef.current?.();
+      startAutoPlayCountdown();
+    }
+  };
+
+  const handleSwitchToBackup = () => {
+    setCurrentServer(STREAM_SERVERS[1]); // Fallback to Server 2 (VidLink)
+  };
+
   const streamUrl =
     type === 'movie'
       ? currentServer.getMovieUrl(tmdbId, activeStartAt)
@@ -172,8 +238,8 @@ export default function VideoPlayer({
     <div className="w-full space-y-4">
       {/* Video Player Frame Container */}
       <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 ring-1 ring-zinc-800/50">
-        {/* Loading Spinner Indicator */}
-        {isLoading && (
+        {/* Loading Spinner Indicator for Iframe mode */}
+        {isLoading && !currentServer.isNativeHls && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/90 backdrop-blur-sm pointer-events-none">
             <div className="w-12 h-12 border-4 border-red-500/20 border-t-red-500 rounded-full animate-spin mb-3" />
             <p className="text-sm font-medium text-zinc-300">Connecting to {currentServer.name}...</p>
@@ -253,17 +319,30 @@ export default function VideoPlayer({
           </div>
         )}
 
-        {/* Video Embed Iframe */}
-        <iframe
-          key={iframeKey}
-          src={streamUrl}
-          title={`${title} Stream Player`}
-          onLoad={() => setIsLoading(false)}
-          className="w-full h-full border-0 relative z-20"
-          allowFullScreen
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          referrerPolicy="origin"
-        />
+        {/* Dynamic Player Rendering: Native HLS Player vs Embed Iframe */}
+        {currentServer.isNativeHls && directStreamData ? (
+          <NativePlayer
+            key={`native-${tmdbId}-${season}-${episode}`}
+            qualities={directStreamData.qualities}
+            subtitles={directStreamData.subtitles}
+            title={title}
+            startAt={activeStartAt}
+            onProgressUpdate={handleNativeProgress}
+            onEnded={handleNativeEnded}
+            onSwitchToBackup={handleSwitchToBackup}
+          />
+        ) : (
+          <iframe
+            key={iframeKey}
+            src={streamUrl}
+            title={`${title} Stream Player`}
+            onLoad={() => setIsLoading(false)}
+            className="w-full h-full border-0 relative z-20"
+            allowFullScreen
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            referrerPolicy="origin"
+          />
+        )}
       </div>
 
       {/* Control Bar: Server Switching & Controls */}
@@ -284,7 +363,7 @@ export default function VideoPlayer({
                   onClick={() => handleServerChange(server)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 cursor-pointer ${
                     isSelected
-                      ? 'bg-red-600 text-white shadow-lg shadow-red-600/30'
+                      ? 'bg-red-600 text-white shadow-lg shadow-red-600/30 ring-2 ring-red-500/50'
                       : 'bg-zinc-800/90 text-zinc-300 hover:bg-zinc-700 hover:text-white'
                   }`}
                 >
@@ -320,7 +399,7 @@ export default function VideoPlayer({
         <div className="pt-2 border-t border-zinc-800/60 flex items-center gap-2 text-[11px] text-zinc-400">
           <Info className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
           <span>
-            Server 1 automatically saves your progress and resumes right where you left off. If a stream buffers, switch servers above.
+            Server 1 (Direct 4K) provides ad-free native HLS streaming with custom resolution &amp; subtitle switcher. If a stream buffers, switch servers above.
           </span>
         </div>
       </div>

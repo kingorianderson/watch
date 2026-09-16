@@ -13,6 +13,7 @@ import HomePage from './pages/HomePage';
 import MoviesPage from './pages/MoviesPage';
 import SeriesPage from './pages/SeriesPage';
 import ExplorePage from './pages/ExplorePage';
+import SportsPage from './pages/SportsPage';
 import WatchPage from './pages/WatchPage';
 import WatchlistPage from './pages/WatchlistPage';
 import TermsPage from './pages/TermsPage';
@@ -48,6 +49,7 @@ export default function App() {
                 <main className="flex-1">
                   <Routes>
                     <Route path="/" element={<HomePage />} />
+                    <Route path="/sports" element={<SportsPage />} />
                     <Route path="/movies" element={<MoviesPage />} />
                     <Route path="/series" element={<SeriesPage />} />
                     <Route path="/explore" element={<ExplorePage />} />
