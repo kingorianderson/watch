@@ -26,7 +26,7 @@ export interface DirectStreamResult {
 
 const STREAM_RESOLVER_ENDPOINT =
   import.meta.env.VITE_STREAM_RESOLVER_URL ||
-  'https://febbox-resolver.kingori.workers.dev/api/stream';
+  'https://febbox-resolver.kingzart254.workers.dev';
 
 export const directStreamService = {
   /**
