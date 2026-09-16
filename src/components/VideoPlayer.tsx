@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Server, RefreshCw, Sparkles, Info, Play, RotateCcw, X } from 'lucide-react';
+import { Server, RefreshCw, Sparkles, Info, Play, RotateCcw, X, AlertCircle } from 'lucide-react';
 import { STREAM_SERVERS, type StreamServer } from '../services/providers';
 import { directStreamService, type DirectStreamResult } from '../services/directStreamService';
 import NativePlayer from './NativePlayer';
@@ -51,6 +51,7 @@ export default function VideoPlayer({
   const [showResumeToast, setShowResumeToast] = useState<boolean>(false);
   const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null);
   const [directStreamData, setDirectStreamData] = useState<DirectStreamResult | null>(null);
+  const [nativeScrapeFailed, setNativeScrapeFailed] = useState<boolean>(false);
 
   const countdownTimerRef = useRef<any>(null);
   const hasTriggeredNextRef = useRef<boolean>(false);
@@ -67,6 +68,7 @@ export default function VideoPlayer({
     if (prevMediaKeyRef.current !== currentMediaKey) {
       prevMediaKeyRef.current = currentMediaKey;
       setIsLoading(true);
+      setNativeScrapeFailed(false);
 
       // Only resume if beyond 3-minute preview threshold (180s)
       const initialTime =
@@ -94,24 +96,36 @@ export default function VideoPlayer({
     if (currentServer.isNativeHls) {
       let isMounted = true;
       setIsLoading(true);
+      setNativeScrapeFailed(false);
+
       directStreamService
         .getDirectStream(tmdbId, type, season, episode, title, releaseYear)
         .then((res) => {
           if (isMounted) {
-            setDirectStreamData(res);
+            if (res && res.qualities && res.qualities.length > 0) {
+              setDirectStreamData(res);
+              setNativeScrapeFailed(false);
+            } else {
+              setDirectStreamData(null);
+              setNativeScrapeFailed(true);
+            }
             setIsLoading(false);
           }
         })
         .catch(() => {
           if (isMounted) {
+            setDirectStreamData(null);
+            setNativeScrapeFailed(true);
             setIsLoading(false);
           }
         });
+
       return () => {
         isMounted = false;
       };
     } else {
       setDirectStreamData(null);
+      setNativeScrapeFailed(false);
     }
   }, [tmdbId, type, season, episode, currentServer, title, releaseYear]);
 
@@ -323,17 +337,53 @@ export default function VideoPlayer({
         )}
 
         {/* Dynamic Player Rendering: Native HLS Player vs Embed Iframe */}
-        {currentServer.isNativeHls && directStreamData ? (
-          <NativePlayer
-            key={`native-${tmdbId}-${season}-${episode}`}
-            qualities={directStreamData.qualities}
-            subtitles={directStreamData.subtitles}
-            title={title}
-            startAt={activeStartAt}
-            onProgressUpdate={handleNativeProgress}
-            onEnded={handleNativeEnded}
-            onSwitchToBackup={handleSwitchToBackup}
-          />
+        {currentServer.isNativeHls ? (
+          directStreamData ? (
+            <NativePlayer
+              key={`native-${tmdbId}-${season}-${episode}`}
+              qualities={directStreamData.qualities}
+              subtitles={directStreamData.subtitles}
+              title={title}
+              startAt={activeStartAt}
+              onProgressUpdate={handleNativeProgress}
+              onEnded={handleNativeEnded}
+              onSwitchToBackup={handleSwitchToBackup}
+            />
+          ) : isLoading ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950 p-6 text-center space-y-4">
+              <div className="w-14 h-14 border-4 border-red-500/20 border-t-red-500 rounded-full animate-spin" />
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-white">Scraping Multi-Source Streams...</h3>
+                <p className="text-xs text-zinc-400 max-w-sm">
+                  Connecting to @movie-web 4K cluster and querying 15+ high-speed sources for zero-ad playback.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-red-400 font-medium bg-red-950/40 px-3 py-1 rounded-full border border-red-800/40">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Resolving 1080p & 4K Feeds</span>
+              </div>
+            </div>
+          ) : nativeScrapeFailed ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/95 p-6 text-center z-30 space-y-4">
+              <div className="w-16 h-16 rounded-full bg-red-600/20 text-red-500 flex items-center justify-center">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <div className="max-w-md space-y-1">
+                <h3 className="text-lg font-bold text-white">Direct Stream Unavailable</h3>
+                <p className="text-xs text-zinc-400">
+                  This specific title is not in the direct HLS archive. Switch to Server 2 (VidLink) to watch in full HD.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={handleSwitchToBackup}
+                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-600/30 transition cursor-pointer"
+                >
+                  Switch to Server 2 (VidLink)
+                </button>
+              </div>
+            </div>
+          ) : null
         ) : (
           <iframe
             key={iframeKey}
