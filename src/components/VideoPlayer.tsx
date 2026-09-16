@@ -208,7 +208,7 @@ export default function VideoPlayer({
   };
 
   const handleSwitchToBackup = () => {
-    setCurrentServer(STREAM_SERVERS[1]); // Fallback to Server 2 (VidLink)
+    setCurrentServer(STREAM_SERVERS[0]); // Fallback to Server 1 (VidLink)
   };
 
   const streamUrl =

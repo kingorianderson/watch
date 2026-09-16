@@ -42,3 +42,4 @@ export interface SportsMatch {
   description?: string;
   streams: SportsStream[];
 }
+

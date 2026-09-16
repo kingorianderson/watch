@@ -86,6 +86,14 @@ export default function NativePlayer({
     setHasError(false);
     setIsLoading(true);
 
+    let retryCount = 0;
+    let loadTimeout: number | null = window.setTimeout(() => {
+      if (isLoading) {
+        setIsLoading(false);
+        setHasError(true);
+      }
+    }, 4500);
+
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -105,7 +113,9 @@ export default function NativePlayer({
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (loadTimeout) clearTimeout(loadTimeout);
         setIsLoading(false);
+        setHasError(false);
         if (startAt > 0) {
           video.currentTime = startAt;
         }
@@ -119,12 +129,21 @@ export default function NativePlayer({
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
+              if (retryCount < 1) {
+                retryCount++;
+                hls.startLoad();
+              } else {
+                if (loadTimeout) clearTimeout(loadTimeout);
+                hls.destroy();
+                setHasError(true);
+                setIsLoading(false);
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               hls.recoverMediaError();
               break;
             default:
+              if (loadTimeout) clearTimeout(loadTimeout);
               hls.destroy();
               setHasError(true);
               setIsLoading(false);
@@ -136,18 +155,27 @@ export default function NativePlayer({
       // Native Safari HLS
       video.src = selectedQuality.url;
       video.addEventListener('loadedmetadata', () => {
+        if (loadTimeout) clearTimeout(loadTimeout);
         setIsLoading(false);
+        setHasError(false);
         if (startAt > 0) {
           video.currentTime = startAt;
         }
         video.play().catch(() => setIsPlaying(false));
       });
+      video.addEventListener('error', () => {
+        if (loadTimeout) clearTimeout(loadTimeout);
+        setHasError(true);
+        setIsLoading(false);
+      });
     } else {
+      if (loadTimeout) clearTimeout(loadTimeout);
       setHasError(true);
       setIsLoading(false);
     }
 
     return () => {
+      if (loadTimeout) clearTimeout(loadTimeout);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -375,7 +403,7 @@ export default function NativePlayer({
           <div className="max-w-md space-y-1">
             <h3 className="text-lg font-bold text-white">Direct Stream Temporarily Unavailable</h3>
             <p className="text-xs text-zinc-400">
-              The high-speed direct stream node is rotating encryption keys. Switch to Server 2 or Server 3 to keep watching smoothly.
+              The direct HLS stream is currently unavailable. Switch to Server 1 (VidLink) to watch instantly in HD.
             </p>
           </div>
           <div className="flex items-center gap-3 pt-2">
@@ -384,7 +412,7 @@ export default function NativePlayer({
                 onClick={onSwitchToBackup}
                 className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-600/30 transition cursor-pointer"
               >
-                Switch to Server 2 (Backup)
+                Switch to Server 1 (VidLink)
               </button>
             )}
             <button
