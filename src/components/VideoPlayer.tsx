@@ -11,6 +11,7 @@ interface VideoPlayerProps {
   season?: number;
   episode?: number;
   title: string;
+  releaseYear?: number;
   startAt?: number;
   onProgressUpdate?: (progress: number, duration: number) => void;
   onEnded?: () => void;
@@ -36,6 +37,7 @@ export default function VideoPlayer({
   season = 1,
   episode = 1,
   title,
+  releaseYear,
   startAt = 0,
   onProgressUpdate,
   onEnded,
@@ -91,8 +93,9 @@ export default function VideoPlayer({
   useEffect(() => {
     if (currentServer.isNativeHls) {
       let isMounted = true;
+      setIsLoading(true);
       directStreamService
-        .getDirectStream(tmdbId, type, season, episode)
+        .getDirectStream(tmdbId, type, season, episode, title, releaseYear)
         .then((res) => {
           if (isMounted) {
             setDirectStreamData(res);
@@ -110,7 +113,7 @@ export default function VideoPlayer({
     } else {
       setDirectStreamData(null);
     }
-  }, [tmdbId, type, season, episode, currentServer]);
+  }, [tmdbId, type, season, episode, currentServer, title, releaseYear]);
 
   // Listen to postMessage events from VidLink without causing iframe re-renders
   const onProgressUpdateRef = useRef(onProgressUpdate);

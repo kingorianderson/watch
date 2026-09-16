@@ -247,6 +247,7 @@ export default function WatchPage() {
           season={currentSeason}
           episode={currentEpisode}
           title={title}
+          releaseYear={year ? Number(year) : undefined}
           startAt={initialStartAt}
           onProgressUpdate={(prog, dur) => {
             updateProgress(Number(id), mediaType, prog, dur, currentSeason, currentEpisode);

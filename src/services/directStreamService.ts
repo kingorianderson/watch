@@ -1,11 +1,20 @@
 /**
- * Direct HLS Stream Resolver Service
- * Communicates with Cloudflare Worker / FebBox Stream Resolver
- * for zero-ad native 4K HLS video playback.
+ * Direct Stream Resolver Service powered by @movie-web/providers
+ * Scrapes 15+ streaming hosts in parallel (FlixHQ, VidCloud, Showbox, Smashy, SuperStream, etc.)
+ * with zero third-party ads, multi-resolution streams (4K, 1080p, 720p), and WebVTT subtitles.
  */
 
+import {
+  buildProviders,
+  makeStandardFetcher,
+  makeSimpleProxyFetcher,
+  targets,
+  type Stream,
+  type ProviderControls,
+} from '@movie-web/providers';
+
 export interface StreamQuality {
-  label: string; // '4K Ultra HD', '1080p FHD', '720p HD', 'Auto'
+  label: string;
   url: string;
   isDefault?: boolean;
 }
@@ -24,118 +33,123 @@ export interface DirectStreamResult {
   sourceName: string;
 }
 
-const STREAM_RESOLVER_ENDPOINT =
-  import.meta.env.VITE_STREAM_RESOLVER_URL ||
-  'https://febbox-resolver.kingzart254.workers.dev';
+const CORS_PROXY_URL =
+  import.meta.env.VITE_STREAM_PROXY_URL ||
+  'https://febbox-resolver.kingzart254.workers.dev/?url=';
+
+// Cached initialized provider runner
+let providerRunner: ProviderControls | null = null;
+
+function getProviderRunner() {
+  if (!providerRunner) {
+    try {
+      providerRunner = buildProviders()
+        .setTarget(targets.BROWSER)
+        .setFetcher(makeStandardFetcher(fetch))
+        .setProxiedFetcher(makeSimpleProxyFetcher(CORS_PROXY_URL, fetch))
+        .addBuiltinProviders()
+        .build();
+    } catch (err) {
+      console.warn('Failed to build @movie-web/providers runner:', err);
+    }
+  }
+  return providerRunner;
+}
 
 export const directStreamService = {
   /**
-   * Resolves direct HLS stream sources for a given movie or TV episode
+   * Resolves direct HLS / MP4 stream sources across 15+ providers in parallel
    */
   async getDirectStream(
     tmdbId: number | string,
     type: 'movie' | 'tv',
     season: number = 1,
-    episode: number = 1
+    episode: number = 1,
+    title?: string,
+    releaseYear?: number
   ): Promise<DirectStreamResult | null> {
     try {
+      const runner = getProviderRunner();
       const isTv = type === 'tv';
-      const queryParams = new URLSearchParams({
-        tmdbId: String(tmdbId),
-        type,
-        ...(isTv ? { season: String(season), episode: String(episode) } : {}),
-      });
+      const cleanTitle = title || 'Media';
+      const year = releaseYear || new Date().getFullYear();
 
-      // Try fetching from configured Cloudflare Worker resolver first
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      if (runner) {
+        // Scrape movie or show using @movie-web/providers
+        const scrapePromise = isTv
+          ? runner.runAll({
+              media: {
+                type: 'show',
+                title: cleanTitle,
+                releaseYear: year,
+                tmdbId: String(tmdbId),
+                season: { number: season, tmdbId: String(tmdbId) },
+                episode: { number: episode, tmdbId: String(tmdbId) },
+              },
+            })
+          : runner.runAll({
+              media: {
+                type: 'movie',
+                title: cleanTitle,
+                releaseYear: year,
+                tmdbId: String(tmdbId),
+              },
+            });
 
-      try {
-        const res = await fetch(`${STREAM_RESOLVER_ENDPOINT}?${queryParams.toString()}`, {
-          signal: controller.signal,
-          headers: { Accept: 'application/json' },
-        });
+        // Timeout race to prevent long hangs (max 7 seconds for scraper resolution)
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 7000));
+        const output = await Promise.race([scrapePromise, timeoutPromise]);
 
-        clearTimeout(timeoutId);
+        if (output && output.stream) {
+          const stream: Stream = output.stream;
+          const qualities: StreamQuality[] = [];
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.qualities) && data.qualities.length > 0) {
+          if (stream.type === 'hls') {
+            qualities.push({
+              label: 'Auto (1080p Adaptive HLS)',
+              url: stream.playlist,
+              isDefault: true,
+            });
+          } else if (stream.type === 'file') {
+            const sortedKeys = Object.keys(stream.qualities).sort((a, b) => {
+              const order = ['4k', '1080', '720', '480', '360', 'unknown'];
+              return order.indexOf(a) - order.indexOf(b);
+            });
+
+            for (const q of sortedKeys) {
+              const file = stream.qualities[q as keyof typeof stream.qualities];
+              if (file && file.url) {
+                const label = q === '4k' ? '4K Ultra HD' : `${q}p HD`;
+                qualities.push({
+                  label,
+                  url: file.url,
+                  isDefault: q === '1080' || q === '720',
+                });
+              }
+            }
+          }
+
+          const subtitles: SubtitleTrack[] = (stream.captions || []).map((c) => ({
+            label: `${c.language.toUpperCase()} ${c.type ? `[${c.type.toUpperCase()}]` : ''}`,
+            language: c.language,
+            url: c.url,
+            isDefault: c.language.toLowerCase().startsWith('en'),
+          }));
+
+          if (qualities.length > 0) {
             return {
-              qualities: data.qualities,
-              subtitles: data.subtitles || [],
-              sourceName: data.sourceName || 'FebBox Direct 4K HLS',
+              title: cleanTitle,
+              qualities,
+              subtitles,
+              sourceName: output.sourceId ? `${output.sourceId.toUpperCase()} (Zero Ads)` : '@movie-web',
             };
           }
         }
-      } catch {
-        // Worker endpoint fallback or network timeout
       }
 
-      // Default high-speed HLS cluster fallback
-      const streamUrls: StreamQuality[] = isTv
-        ? [
-            {
-              label: '1080p FHD',
-              url: `https://info.movieboxnoob.cc/video/${tmdbId}/tv_${season}_${episode}_1080p.m3u8`,
-              isDefault: true,
-            },
-            {
-              label: '720p HD',
-              url: `https://info.movieboxnoob.cc/video/${tmdbId}/tv_${season}_${episode}_720p.m3u8`,
-            },
-            {
-              label: '4K Ultra HD',
-              url: `https://info.movieboxnoob.cc/video/${tmdbId}/tv_${season}_${episode}_4k.m3u8`,
-            },
-          ]
-        : [
-            {
-              label: '1080p FHD',
-              url: `https://info.movieboxnoob.cc/video/${tmdbId}/video_1080p.m3u8`,
-              isDefault: true,
-            },
-            {
-              label: '720p HD',
-              url: `https://info.movieboxnoob.cc/video/${tmdbId}/video_720p.m3u8`,
-            },
-            {
-              label: '4K Ultra HD',
-              url: `https://info.movieboxnoob.cc/video/${tmdbId}/video_4k_hdr.m3u8`,
-            },
-          ];
-
-      const subtitles: SubtitleTrack[] = [
-        {
-          label: 'English [CC]',
-          language: 'en',
-          url: `https://sub.wyzie.ru/sub/${tmdbId}/en.vtt`,
-          isDefault: true,
-        },
-        {
-          label: 'Spanish',
-          language: 'es',
-          url: `https://sub.wyzie.ru/sub/${tmdbId}/es.vtt`,
-        },
-        {
-          label: 'French',
-          language: 'fr',
-          url: `https://sub.wyzie.ru/sub/${tmdbId}/fr.vtt`,
-        },
-        {
-          label: 'Arabic',
-          language: 'ar',
-          url: `https://sub.wyzie.ru/sub/${tmdbId}/ar.vtt`,
-        },
-      ];
-
-      return {
-        qualities: streamUrls,
-        subtitles,
-        sourceName: 'FebBox Direct 4K (Zero Ads)',
-      };
+      return null;
     } catch (err) {
-      console.warn('Failed to resolve direct HLS stream:', err);
+      console.warn('Scraper runner error:', err);
       return null;
     }
   },
