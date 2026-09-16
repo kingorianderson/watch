@@ -78,7 +78,7 @@ export default function NativePlayer({
 
   const hideControlsTimerRef = useRef<number | null>(null);
 
-  // Initialize HLS.js or Native HLS playback
+  // Initialize HLS.js or direct video playback
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !selectedQuality?.url) return;
@@ -86,20 +86,23 @@ export default function NativePlayer({
     setHasError(false);
     setIsLoading(true);
 
+    const streamUrl = selectedQuality.url;
+    const isHlsStream = streamUrl.includes('.m3u8') || streamUrl.includes('m3u8');
+
     let retryCount = 0;
     let loadTimeout: number | null = window.setTimeout(() => {
-      if (isLoading) {
+      if (isLoading && video.readyState < 2) {
         setIsLoading(false);
         setHasError(true);
       }
-    }, 4500);
+    }, 12000);
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
 
-    if (Hls.isSupported()) {
+    if (isHlsStream && Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
@@ -109,7 +112,7 @@ export default function NativePlayer({
       });
 
       hlsRef.current = hls;
-      hls.loadSource(selectedQuality.url);
+      hls.loadSource(streamUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -120,7 +123,6 @@ export default function NativePlayer({
           video.currentTime = startAt;
         }
         video.play().catch(() => {
-          // Autoplay policy fallback (user must interact)
           setIsPlaying(false);
         });
       });
@@ -129,7 +131,7 @@ export default function NativePlayer({
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              if (retryCount < 1) {
+              if (retryCount < 2) {
                 retryCount++;
                 hls.startLoad();
               } else {
@@ -151,10 +153,12 @@ export default function NativePlayer({
           }
         }
       });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native Safari HLS
-      video.src = selectedQuality.url;
-      video.addEventListener('loadedmetadata', () => {
+    } else {
+      // Direct MP4 VIP Stream or Native Safari/iOS HLS
+      video.src = streamUrl;
+      video.load();
+
+      const onLoadedMetadata = () => {
         if (loadTimeout) clearTimeout(loadTimeout);
         setIsLoading(false);
         setHasError(false);
@@ -162,16 +166,23 @@ export default function NativePlayer({
           video.currentTime = startAt;
         }
         video.play().catch(() => setIsPlaying(false));
-      });
-      video.addEventListener('error', () => {
+      };
+
+      const onCanPlay = () => {
+        if (loadTimeout) clearTimeout(loadTimeout);
+        setIsLoading(false);
+        setHasError(false);
+      };
+
+      const onError = () => {
         if (loadTimeout) clearTimeout(loadTimeout);
         setHasError(true);
         setIsLoading(false);
-      });
-    } else {
-      if (loadTimeout) clearTimeout(loadTimeout);
-      setHasError(true);
-      setIsLoading(false);
+      };
+
+      video.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+      video.addEventListener('canplay', onCanPlay, { once: true });
+      video.addEventListener('error', onError, { once: true });
     }
 
     return () => {

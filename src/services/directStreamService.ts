@@ -1,7 +1,7 @@
 /**
- * Direct Stream Resolver Service powered by @movie-web/providers
- * Scrapes 15+ streaming hosts in parallel (FlixHQ, VidCloud, Showbox, Smashy, SuperStream, etc.)
- * with zero third-party ads, multi-resolution streams (4K, 1080p, 720p), and WebVTT subtitles.
+ * Direct Stream Resolver Service powered by FebBox 4K Native VIP Engine & @movie-web/providers
+ * Resolves ad-free, direct Native 4K & 1080p HLS streaming sources with multi-resolution switcher,
+ * custom red scrubber, and WebVTT subtitles.
  */
 
 import {
@@ -33,9 +33,8 @@ export interface DirectStreamResult {
   sourceName: string;
 }
 
-const CORS_PROXY_URL =
-  import.meta.env.VITE_STREAM_PROXY_URL ||
-  'https://febbox-resolver.kingzart254.workers.dev/?url=';
+const WORKER_ENDPOINT = 'https://febbox-resolver.kingzart254.workers.dev';
+const CORS_PROXY_URL = `${WORKER_ENDPOINT}/?url=`;
 
 // Cached initialized provider runner
 let providerRunner: ProviderControls | null = null;
@@ -58,7 +57,7 @@ function getProviderRunner() {
 
 export const directStreamService = {
   /**
-   * Resolves direct HLS / MP4 stream sources across 15+ providers in parallel
+   * Resolves direct HLS / MP4 stream sources from FebBox VIP Engine & fallback scraper cluster
    */
   async getDirectStream(
     tmdbId: number | string,
@@ -68,14 +67,71 @@ export const directStreamService = {
     title?: string,
     releaseYear?: number
   ): Promise<DirectStreamResult | null> {
+    const isTv = type === 'tv';
+    const cleanTitle = title || 'Media';
+    const year = releaseYear || new Date().getFullYear();
+
+    // 1. First Priority: Query Cloudflare Worker with FebBox 4K VIP Engine
+    try {
+      const queryParams = new URLSearchParams({
+        title: cleanTitle,
+        type: isTv ? 'tv' : 'movie',
+        season: String(season),
+        episode: String(episode),
+        tmdbId: String(tmdbId),
+        ...(year ? { year: String(year) } : {}),
+      });
+
+      const febboxPromise = fetch(`${WORKER_ENDPOINT}/?${queryParams.toString()}`, {
+        headers: {
+          Accept: 'application/json',
+        },
+      }).then(async (res) => {
+        if (!res.ok) return null;
+        return res.json();
+      });
+
+      // 6-second timeout for FebBox resolution
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+      const febboxData: any = await Promise.race([febboxPromise, timeoutPromise]);
+
+      if (febboxData && febboxData.success && Array.isArray(febboxData.qualities) && febboxData.qualities.length > 0) {
+        const streamQualities: StreamQuality[] = febboxData.qualities.map((q: any) => ({
+          label: q.label || '1080p HD',
+          url: q.url,
+          isDefault: q.isDefault || false,
+        }));
+
+        // Ensure at least one default
+        if (!streamQualities.some((q) => q.isDefault)) {
+          streamQualities[0].isDefault = true;
+        }
+
+        const subtitles: SubtitleTrack[] = Array.isArray(febboxData.subtitles)
+          ? febboxData.subtitles.map((s: any) => ({
+              label: s.label || s.language || 'English',
+              language: s.language || 'en',
+              url: s.url,
+              isDefault: s.isDefault || false,
+            }))
+          : [];
+
+        return {
+          title: febboxData.title || cleanTitle,
+          qualities: streamQualities,
+          subtitles,
+          sourceName: 'FebBox 4K VIP (Zero Ads)',
+        };
+      }
+    } catch (workerErr) {
+      console.warn('FebBox Worker resolver error, falling back to @movie-web scraper:', workerErr);
+    }
+
+    // 2. Second Priority: Fallback to @movie-web/providers scraper cluster
     try {
       const runner = getProviderRunner();
-      const isTv = type === 'tv';
-      const cleanTitle = title || 'Media';
-      const year = releaseYear || new Date().getFullYear();
 
       if (runner) {
-        // Scrape movie or show using @movie-web/providers
         const scrapePromise = isTv
           ? runner.runAll({
               media: {
@@ -96,8 +152,7 @@ export const directStreamService = {
               },
             });
 
-        // Timeout race to prevent long hangs (max 7 seconds for scraper resolution)
-        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 7000));
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
         const output = await Promise.race([scrapePromise, timeoutPromise]);
 
         if (output && output.stream) {
