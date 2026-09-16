@@ -11,16 +11,8 @@ export interface StreamServer {
 
 export const STREAM_SERVERS: StreamServer[] = [
   {
-    id: 'direct-hls',
-    name: 'Server 1 (Direct 4K)',
-    badge: '👑 Zero Ads / 4K Player',
-    isNativeHls: true,
-    getMovieUrl: (id) => `https://vidsrc.stream/hls/movie/${id}/master.m3u8`,
-    getTvUrl: (id, s, e) => `https://vidsrc.stream/hls/tv/${id}/${s}/${e}/master.m3u8`,
-  },
-  {
     id: 'vidlink',
-    name: 'Server 2 (VidLink)',
+    name: 'Server 1 (VidLink)',
     badge: '⚡ Fast HD / Auto-Resume',
     getMovieUrl: (id, startAt) =>
       `https://vidlink.pro/movie/${id}?primaryColor=ef4444&secondaryColor=18181b${
@@ -33,31 +25,39 @@ export const STREAM_SERVERS: StreamServer[] = [
   },
   {
     id: 'embed-su',
-    name: 'Server 3 (Embed.su)',
+    name: 'Server 2 (Embed.su)',
     badge: '🌟 1080p / Subtitles',
     getMovieUrl: (id) => `https://embed.su/embed/movie/${id}`,
     getTvUrl: (id, s, e) => `https://embed.su/embed/tv/${id}/${s}/${e}`,
   },
   {
     id: 'videasy',
-    name: 'Server 4 (Videasy)',
+    name: 'Server 3 (Videasy)',
     badge: '🚀 Ultra Fast',
     getMovieUrl: (id) => `https://player.videasy.net/movie/${id}?color=ef4444`,
     getTvUrl: (id, s, e) => `https://player.videasy.net/tv/${id}/${s}/${e}?color=ef4444`,
   },
   {
     id: 'autoembed',
-    name: 'Server 5 (AutoEmbed)',
+    name: 'Server 4 (AutoEmbed)',
     badge: '⚡ High Speed',
     getMovieUrl: (id) => `https://player.autoembed.cc/embed/movie/${id}`,
     getTvUrl: (id, s, e) => `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`,
   },
   {
     id: 'smashystream',
-    name: 'Server 6 (Smashy)',
+    name: 'Server 5 (Smashy)',
     badge: '🍿 Anime & Multi-Lang',
     getMovieUrl: (id) => `https://player.smashystream.com/movie/${id}`,
     getTvUrl: (id, s, e) => `https://player.smashystream.com/tv/${id}/${s}/${e}`,
+  },
+  {
+    id: 'direct-hls',
+    name: 'Server 6 (Direct 4K)',
+    badge: '👑 Native @movie-web',
+    isNativeHls: true,
+    getMovieUrl: (id) => `https://embed.su/embed/movie/${id}`,
+    getTvUrl: (id, s, e) => `https://embed.su/embed/tv/${id}/${s}/${e}`,
   },
   {
     id: 'vidsrc-cc',
