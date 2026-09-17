@@ -81,11 +81,11 @@ export async function convertSrtToVttBlob(downloadUrl: string): Promise<string> 
   }
 }
 
-async function queryOpenSubtitles(searchQuery: string): Promise<any[]> {
-  const osUrl = `https://rest.opensubtitles.org/search/${searchQuery}`;
+async function queryOpenSubtitles(querySlug: string): Promise<any[]> {
+  const osUrl = `https://rest.opensubtitles.org/search/query-${querySlug}`;
   const proxyUrl = `${WORKER_ENDPOINT}/?url=${encodeURIComponent(osUrl)}`;
 
-  // 1. Try via proxy
+  // 1. Try via Cloudflare Worker proxy
   try {
     const res = await fetch(proxyUrl, {
       headers: {
@@ -132,28 +132,33 @@ export const subtitleService = {
         return [];
       }
 
-      const clean = rawTitle.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-      if (!clean) return [];
+      // Format clean query separated by '+' to prevent double encoding issues
+      const cleanSlug = rawTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '+')
+        .replace(/^\+|\+$/g, '');
+
+      if (!cleanSlug) return [];
 
       const isTv = type === 'tv';
-      const queries: string[] = [];
+      const querySlugs: string[] = [];
 
       if (isTv) {
         const sPad = String(season).padStart(2, '0');
         const ePad = String(episode).padStart(2, '0');
-        queries.push(`query-${encodeURIComponent(`${clean} s${sPad}e${ePad}`)}`);
-        queries.push(`query-${encodeURIComponent(`${clean} season ${season} episode ${episode}`)}`);
-        queries.push(`query-${encodeURIComponent(clean)}`);
+        querySlugs.push(`${cleanSlug}+s${sPad}e${ePad}`);
+        querySlugs.push(`${cleanSlug}+season+${season}+episode+${episode}`);
+        querySlugs.push(cleanSlug);
       } else {
         if (year) {
-          queries.push(`query-${encodeURIComponent(`${clean} ${year}`)}`);
+          querySlugs.push(`${cleanSlug}+${year}`);
         }
-        queries.push(`query-${encodeURIComponent(clean)}`);
+        querySlugs.push(cleanSlug);
       }
 
       let rawData: any[] = [];
-      for (const q of queries) {
-        rawData = await queryOpenSubtitles(q);
+      for (const slug of querySlugs) {
+        rawData = await queryOpenSubtitles(slug);
         if (rawData.length > 0) break;
       }
 
@@ -185,12 +190,13 @@ export const subtitleService = {
         return a.label.localeCompare(b.label);
       });
 
-      // Pre-convert default (English) subtitle to WebVTT blob in background
-      const defaultSub = subtitles.find((s) => s.isDefault) || subtitles[0];
-      if (defaultSub && defaultSub.downloadUrl) {
-        convertSrtToVttBlob(defaultSub.downloadUrl).then((blobUrl) => {
-          defaultSub.url = blobUrl;
-        }).catch(() => {});
+      // Pre-convert top subtitles (English, etc.) to WebVTT blobs in background for instantaneous playback
+      for (const sub of subtitles.slice(0, 3)) {
+        if (sub.downloadUrl) {
+          convertSrtToVttBlob(sub.downloadUrl).then((blobUrl) => {
+            sub.url = blobUrl;
+          }).catch(() => {});
+        }
       }
 
       return subtitles;
