@@ -14,6 +14,10 @@ import {
   Check,
   AlertCircle,
   RefreshCw,
+  ChevronRight,
+  ChevronLeft,
+  Gauge,
+  Sliders,
 } from 'lucide-react';
 import type { StreamQuality, SubtitleTrack } from '../services/directStreamService';
 
@@ -50,9 +54,10 @@ export default function NativePlayer({
 }: NativePlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
 
-  // Player state
+  // Core Playback State
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -71,14 +76,24 @@ export default function NativePlayer({
   });
   const [selectedSubtitle, setSelectedSubtitle] = useState<string>('off');
 
-  // Dropdown menus
-  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
-  const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'main' | 'quality' | 'speed'>('main');
+  // YouTube-style Settings Navigation: 'closed' | 'main' | 'quality' | 'speed' | 'subtitles'
+  const [menuView, setMenuView] = useState<'closed' | 'main' | 'quality' | 'speed' | 'subtitles'>('closed');
 
+  // Hover Scrubber Preview Time
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const [hoverPosition, setHoverPosition] = useState<number>(0);
+
+  // Visual Skip Ripple Indicator (+10s, -10s)
+  const [skipIndicator, setSkipIndicator] = useState<{ text: string; side: 'left' | 'right' } | null>(null);
+  const skipIndicatorTimerRef = useRef<number | null>(null);
+
+  // Seamless Quality Switching Trackers
+  const savedPlaybackTimeRef = useRef<number>(startAt);
+  const shouldResumePlayRef = useRef<boolean>(true);
   const hideControlsTimerRef = useRef<number | null>(null);
+  const lastTouchTimeRef = useRef<number>(0);
 
-  // Initialize HLS.js or direct video playback
+  // Initialize or Switch Video Stream (Seamless position restoration like YouTube)
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !selectedQuality?.url) return;
@@ -88,6 +103,7 @@ export default function NativePlayer({
 
     const streamUrl = selectedQuality.url;
     const isHlsStream = streamUrl.includes('.m3u8') || streamUrl.includes('m3u8');
+    const targetSeekTime = savedPlaybackTimeRef.current;
 
     let retryCount = 0;
     let loadTimeout: number | null = window.setTimeout(() => {
@@ -95,7 +111,7 @@ export default function NativePlayer({
         setIsLoading(false);
         setHasError(true);
       }
-    }, 12000);
+    }, 14000);
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -119,12 +135,14 @@ export default function NativePlayer({
         if (loadTimeout) clearTimeout(loadTimeout);
         setIsLoading(false);
         setHasError(false);
-        if (startAt > 0) {
-          video.currentTime = startAt;
+
+        if (targetSeekTime > 0) {
+          video.currentTime = targetSeekTime;
         }
-        video.play().catch(() => {
-          setIsPlaying(false);
-        });
+
+        if (shouldResumePlayRef.current) {
+          video.play().catch(() => setIsPlaying(false));
+        }
       });
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -154,7 +172,7 @@ export default function NativePlayer({
         }
       });
     } else {
-      // Direct MP4 VIP Stream or Native Safari/iOS HLS
+      // Direct MP4 VIP Stream or Native Safari HLS
       video.src = streamUrl;
       video.load();
 
@@ -162,10 +180,14 @@ export default function NativePlayer({
         if (loadTimeout) clearTimeout(loadTimeout);
         setIsLoading(false);
         setHasError(false);
-        if (startAt > 0) {
-          video.currentTime = startAt;
+
+        if (targetSeekTime > 0) {
+          video.currentTime = targetSeekTime;
         }
-        video.play().catch(() => setIsPlaying(false));
+
+        if (shouldResumePlayRef.current) {
+          video.play().catch(() => setIsPlaying(false));
+        }
       };
 
       const onCanPlay = () => {
@@ -192,9 +214,22 @@ export default function NativePlayer({
         hlsRef.current = null;
       }
     };
-  }, [selectedQuality, startAt]);
+  }, [selectedQuality]);
 
-  // Video Event Handlers
+  // Handle Quality Switch (YouTube Style: remembers exact timestamp and resumes)
+  const handleQualityChange = (newQuality: StreamQuality) => {
+    const video = videoRef.current;
+    const currentPos = video ? video.currentTime : currentTime;
+    const wasPlaying = video ? !video.paused : isPlaying;
+
+    savedPlaybackTimeRef.current = currentPos;
+    shouldResumePlayRef.current = wasPlaying;
+
+    setSelectedQuality(newQuality);
+    setMenuView('closed');
+  };
+
+  // Video Time & Buffer Updates
   const handleTimeUpdate = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -203,8 +238,9 @@ export default function NativePlayer({
     const dur = video.duration || 0;
     setCurrentTime(current);
     setDuration(dur);
+    savedPlaybackTimeRef.current = current;
 
-    // Update buffered progress
+    // Update buffer
     if (video.buffered.length > 0) {
       for (let i = 0; i < video.buffered.length; i++) {
         if (video.buffered.start(i) <= current && current <= video.buffered.end(i)) {
@@ -229,6 +265,24 @@ export default function NativePlayer({
     }
   }, []);
 
+  const triggerSkipFeedback = (text: string, side: 'left' | 'right') => {
+    setSkipIndicator({ text, side });
+    if (skipIndicatorTimerRef.current) clearTimeout(skipIndicatorTimerRef.current);
+    skipIndicatorTimerRef.current = window.setTimeout(() => {
+      setSkipIndicator(null);
+    }, 650);
+  };
+
+  const handleSkip = (seconds: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const newTime = Math.max(0, Math.min(video.currentTime + seconds, duration));
+    video.currentTime = newTime;
+    setCurrentTime(newTime);
+    savedPlaybackTimeRef.current = newTime;
+    triggerSkipFeedback(seconds > 0 ? `+${seconds}s` : `${seconds}s`, seconds > 0 ? 'right' : 'left');
+  };
+
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const video = videoRef.current;
     if (!video || !duration) return;
@@ -236,12 +290,20 @@ export default function NativePlayer({
     const newTime = (Number(e.target.value) / 100) * duration;
     video.currentTime = newTime;
     setCurrentTime(newTime);
+    savedPlaybackTimeRef.current = newTime;
   };
 
-  const handleSkip = (seconds: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = Math.max(0, Math.min(video.currentTime + seconds, duration));
+  const handleMouseMoveProgressBar = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!progressBarRef.current || !duration) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const pos = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percentage = pos / rect.width;
+    setHoverPosition(pos);
+    setHoverTime(percentage * duration);
+  };
+
+  const handleMouseLeaveProgressBar = () => {
+    setHoverTime(null);
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -286,26 +348,50 @@ export default function NativePlayer({
     if (!video) return;
     video.playbackRate = speed;
     setPlaybackSpeed(speed);
-    setShowSettingsMenu(false);
+    setMenuView('closed');
   };
 
-  // Auto hide controls
+  const toggleCaptionsQuick = () => {
+    if (subtitles.length === 0) return;
+    if (selectedSubtitle !== 'off') {
+      setSelectedSubtitle('off');
+    } else {
+      const defaultSub = subtitles.find((s) => s.isDefault) || subtitles[0];
+      setSelectedSubtitle(defaultSub ? defaultSub.language : 'off');
+    }
+  };
+
+  // Auto-hide controls timer
   const handleMouseMove = () => {
     setShowControls(true);
     if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
     if (isPlaying) {
       hideControlsTimerRef.current = window.setTimeout(() => {
         setShowControls(false);
-        setShowSettingsMenu(false);
-        setShowSubtitleMenu(false);
-      }, 3000);
+        setMenuView('closed');
+      }, 3500);
     }
   };
 
-  // Global Keyboard Shortcuts
+  // Double Click / Double Tap for 10s skip
+  const handleVideoClick = (e: React.MouseEvent<HTMLVideoElement>) => {
+    const now = Date.now();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const isLeft = clickX < rect.width / 2;
+
+    if (now - lastTouchTimeRef.current < 300) {
+      // Double click/tap detected
+      handleSkip(isLeft ? -10 : 10);
+    } else {
+      handlePlayPause();
+    }
+    lastTouchTimeRef.current = now;
+  };
+
+  // YouTube Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if focus is on an input or textarea
       if (
         document.activeElement instanceof HTMLInputElement ||
         document.activeElement instanceof HTMLTextAreaElement
@@ -327,20 +413,30 @@ export default function NativePlayer({
           e.preventDefault();
           toggleMute();
           break;
-        case 'arrowleft':
+        case 'c':
+          e.preventDefault();
+          toggleCaptionsQuick();
+          break;
         case 'j':
           e.preventDefault();
           handleSkip(-10);
           break;
-        case 'arrowright':
         case 'l':
           e.preventDefault();
           handleSkip(10);
           break;
+        case 'arrowleft':
+          e.preventDefault();
+          handleSkip(-5);
+          break;
+        case 'arrowright':
+          e.preventDefault();
+          handleSkip(5);
+          break;
         case 'arrowup':
           e.preventDefault();
           if (videoRef.current) {
-            const newVol = Math.min(1, (videoRef.current.volume || 0) + 0.1);
+            const newVol = Math.min(1, (videoRef.current.volume || 0) + 0.05);
             videoRef.current.volume = newVol;
             setVolume(newVol);
             setIsMuted(false);
@@ -349,10 +445,42 @@ export default function NativePlayer({
         case 'arrowdown':
           e.preventDefault();
           if (videoRef.current) {
-            const newVol = Math.max(0, (videoRef.current.volume || 0) - 0.1);
+            const newVol = Math.max(0, (videoRef.current.volume || 0) - 0.05);
             videoRef.current.volume = newVol;
             setVolume(newVol);
             setIsMuted(newVol === 0);
+          }
+          break;
+        case '>':
+          if (e.shiftKey && videoRef.current) {
+            const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+            const next = speeds.find((s) => s > playbackSpeed) || 2;
+            handleSpeedChange(next);
+          }
+          break;
+        case '<':
+          if (e.shiftKey && videoRef.current) {
+            const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+            const prev = [...speeds].reverse().find((s) => s < playbackSpeed) || 0.25;
+            handleSpeedChange(prev);
+          }
+          break;
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+          if (duration > 0 && videoRef.current) {
+            const percent = Number(e.key) / 10;
+            const newPos = percent * duration;
+            videoRef.current.currentTime = newPos;
+            setCurrentTime(newPos);
+            savedPlaybackTimeRef.current = newPos;
           }
           break;
       }
@@ -360,7 +488,22 @@ export default function NativePlayer({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handlePlayPause]);
+  }, [handlePlayPause, playbackSpeed, duration, subtitles, selectedSubtitle]);
+
+  // Active Quality Short Display Badge (e.g. "4K", "1080p", "720p")
+  const currentBadgeText =
+    selectedQuality.shortLabel ||
+    (selectedQuality.label?.includes('4K')
+      ? '4K'
+      : selectedQuality.label?.includes('1440')
+      ? '1440p'
+      : selectedQuality.label?.includes('1080')
+      ? '1080p'
+      : selectedQuality.label?.includes('720')
+      ? '720p'
+      : selectedQuality.label?.includes('480')
+      ? '480p'
+      : 'HD');
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration > 0 ? (bufferedEnd / duration) * 100 : 0;
@@ -370,7 +513,7 @@ export default function NativePlayer({
       ref={containerRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => isPlaying && setShowControls(false)}
-      className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group select-none flex items-center justify-center"
+      className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group select-none flex items-center justify-center font-sans"
     >
       {/* HTML5 Video Element */}
       <video
@@ -385,36 +528,45 @@ export default function NativePlayer({
         }}
         onPause={() => setIsPlaying(false)}
         onEnded={onEnded}
-        onClick={handlePlayPause}
+        onClick={handleVideoClick}
         onDoubleClick={toggleFullscreen}
         className="w-full h-full object-contain cursor-pointer"
         playsInline
       />
 
-      {/* Subtitles Overlay */}
-      {selectedSubtitle !== 'off' && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 text-center pointer-events-none z-20 px-4">
-          {/* Native track rendering is handled via WebVTT cues */}
+      {/* YouTube Double-Tap Skip Feedback Animation */}
+      {skipIndicator && (
+        <div
+          className={`absolute top-1/2 -translate-y-1/2 z-20 flex flex-col items-center justify-center w-28 h-28 rounded-full bg-black/60 text-white backdrop-blur-md animate-in zoom-in-75 duration-150 pointer-events-none ${
+            skipIndicator.side === 'left' ? 'left-12' : 'right-12'
+          }`}
+        >
+          {skipIndicator.side === 'left' ? (
+            <RotateCcw className="w-8 h-8 text-red-500 mb-1" />
+          ) : (
+            <RotateCw className="w-8 h-8 text-red-500 mb-1" />
+          )}
+          <span className="text-xs font-bold tracking-wide">{skipIndicator.text}</span>
         </div>
       )}
 
       {/* Loading Spinner */}
       {isLoading && !hasError && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none z-20">
-          <div className="w-14 h-14 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
+          <div className="w-14 h-14 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin shadow-xl" />
         </div>
       )}
 
-      {/* Error Fallback Screen */}
+      {/* Error Fallback Recovery Screen */}
       {hasError && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/95 p-6 text-center z-30 space-y-4">
           <div className="w-16 h-16 rounded-full bg-red-600/20 text-red-500 flex items-center justify-center">
             <AlertCircle className="w-8 h-8" />
           </div>
           <div className="max-w-md space-y-1">
-            <h3 className="text-lg font-bold text-white">Direct Stream Temporarily Unavailable</h3>
+            <h3 className="text-lg font-bold text-white">Stream Temporarily Unavailable</h3>
             <p className="text-xs text-zinc-400">
-              The direct HLS stream is currently unavailable. Switch to Server 2 (VidLink) to watch instantly in HD.
+              The selected quality is currently buffering. Try another resolution from the quality menu or switch to Server 2.
             </p>
           </div>
           <div className="flex items-center gap-3 pt-2">
@@ -443,48 +595,63 @@ export default function NativePlayer({
         </div>
       )}
 
-      {/* Center Play/Pause Pulsing Quick Action */}
+      {/* Center Play Button Overlay */}
       {!isPlaying && !isLoading && !hasError && (
         <button
           onClick={handlePlayPause}
           className="absolute inset-0 flex items-center justify-center bg-black/30 transition cursor-pointer z-10"
         >
-          <div className="w-16 h-16 rounded-full bg-red-600/90 hover:bg-red-500 text-white flex items-center justify-center shadow-2xl transform scale-100 hover:scale-110 transition duration-200 ring-4 ring-red-600/30">
+          <div className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-2xl transform scale-100 hover:scale-110 transition duration-200 ring-4 ring-red-600/30">
             <Play className="w-7 h-7 fill-white ml-1" />
           </div>
         </button>
       )}
 
-      {/* Bottom Control Bar */}
+      {/* Bottom YouTube Control Bar */}
       <div
-        className={`absolute inset-x-0 bottom-0 z-30 p-4 bg-gradient-to-t from-black/95 via-black/70 to-transparent transition-opacity duration-300 ${
-          showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        className={`absolute inset-x-0 bottom-0 z-30 px-4 pb-3 pt-10 bg-gradient-to-t from-black/95 via-black/60 to-transparent transition-opacity duration-300 ${
+          showControls || !isPlaying || menuView !== 'closed' ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
-        {/* Scrubber Progress Bar */}
-        <div className="relative w-full h-2 mb-3 flex items-center group/progress cursor-pointer">
-          {/* Background Track */}
-          <div className="absolute inset-0 bg-zinc-700/60 rounded-full overflow-hidden">
-            {/* Buffered progress */}
+        {/* YouTube Scrubber Progress Bar */}
+        <div
+          ref={progressBarRef}
+          onMouseMove={handleMouseMoveProgressBar}
+          onMouseLeave={handleMouseLeaveProgressBar}
+          className="relative w-full h-1.5 hover:h-2.5 mb-3 flex items-center group/progress cursor-pointer transition-all duration-150"
+        >
+          {/* Hover Time Tooltip */}
+          {hoverTime !== null && (
             <div
-              className="h-full bg-zinc-500/50 transition-all duration-150"
+              className="absolute -top-8 px-2 py-1 bg-zinc-900/95 text-white text-[11px] font-mono font-bold rounded shadow-lg border border-zinc-700 pointer-events-none transform -translate-x-1/2 z-40"
+              style={{ left: `${hoverPosition}px` }}
+            >
+              {formatTime(hoverTime)}
+            </div>
+          )}
+
+          {/* Background Gray Track */}
+          <div className="absolute inset-0 bg-white/20 rounded-full overflow-hidden">
+            {/* Buffered Download Progress */}
+            <div
+              className="h-full bg-white/40 transition-all duration-150"
               style={{ width: `${bufferedPercent}%` }}
             />
           </div>
 
-          {/* Active Played Progress */}
+          {/* Active Red Progress Bar */}
           <div
-            className="absolute top-0 left-0 bottom-0 bg-gradient-to-r from-red-600 to-amber-500 rounded-full pointer-events-none"
+            className="absolute top-0 left-0 bottom-0 bg-red-600 rounded-full pointer-events-none"
             style={{ width: `${progressPercent}%` }}
           />
 
           {/* Scrubber Thumb */}
           <div
-            className="absolute w-3.5 h-3.5 bg-white rounded-full shadow-md transform -translate-x-1/2 scale-0 group-hover/progress:scale-100 transition-transform pointer-events-none"
+            className="absolute w-3.5 h-3.5 bg-red-600 rounded-full shadow-lg transform -translate-x-1/2 scale-0 group-hover/progress:scale-100 transition-transform pointer-events-none ring-2 ring-white"
             style={{ left: `${progressPercent}%` }}
           />
 
-          {/* Invisible Native Input for Smooth Scrubbing */}
+          {/* Native Range Slider */}
           <input
             type="range"
             min="0"
@@ -498,28 +665,28 @@ export default function NativePlayer({
 
         {/* Buttons Row */}
         <div className="flex items-center justify-between text-white text-xs">
-          {/* Left Controls (Play, Skip, Volume, Time) */}
-          <div className="flex items-center gap-3">
+          {/* Left Controls (Play, Skip, Volume, Timestamp) */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={handlePlayPause}
-              className="p-2 rounded-lg hover:bg-white/10 transition cursor-pointer text-zinc-200 hover:text-white"
-              title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+              className="p-2 rounded-lg hover:bg-white/15 transition cursor-pointer text-zinc-100 hover:text-white"
+              title={isPlaying ? 'Pause (k / Space)' : 'Play (k / Space)'}
             >
-              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 fill-current" />}
+              {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
             </button>
 
             <button
               onClick={() => handleSkip(-10)}
-              className="p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer text-zinc-300 hover:text-white"
-              title="Rewind 10s (Left Arrow)"
+              className="p-1.5 rounded-lg hover:bg-white/15 transition cursor-pointer text-zinc-300 hover:text-white"
+              title="Rewind 10s (j)"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
 
             <button
               onClick={() => handleSkip(10)}
-              className="p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer text-zinc-300 hover:text-white"
-              title="Forward 10s (Right Arrow)"
+              className="p-1.5 rounded-lg hover:bg-white/15 transition cursor-pointer text-zinc-300 hover:text-white"
+              title="Forward 10s (l)"
             >
               <RotateCw className="w-4 h-4" />
             </button>
@@ -528,8 +695,8 @@ export default function NativePlayer({
             <div className="flex items-center gap-1.5 group/volume">
               <button
                 onClick={toggleMute}
-                className="p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer text-zinc-300 hover:text-white"
-                title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
+                className="p-1.5 rounded-lg hover:bg-white/15 transition cursor-pointer text-zinc-300 hover:text-white"
+                title={isMuted ? 'Unmute (m)' : 'Mute (m)'}
               >
                 {isMuted || volume === 0 ? (
                   <VolumeX className="w-4 h-4 text-red-400" />
@@ -544,11 +711,11 @@ export default function NativePlayer({
                 step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
-                className="w-16 h-1 bg-zinc-700 rounded-lg accent-red-600 cursor-pointer opacity-80 group-hover/volume:opacity-100 transition"
+                className="w-14 sm:w-20 h-1 bg-zinc-600 rounded-lg accent-red-600 cursor-pointer opacity-80 group-hover/volume:opacity-100 transition"
               />
             </div>
 
-            {/* Time Stamp Display */}
+            {/* Time Stamp */}
             <div className="text-[11px] font-mono text-zinc-300 pl-1">
               <span>{formatTime(currentTime)}</span>
               <span className="text-zinc-500 mx-1">/</span>
@@ -556,142 +723,243 @@ export default function NativePlayer({
             </div>
           </div>
 
-          {/* Right Controls (Quality, Subtitles, Settings, Fullscreen) */}
+          {/* Right Controls (Quality Badge, Subtitles, Settings, Fullscreen) */}
           <div className="flex items-center gap-2 relative">
-            {/* Quality Badge Button */}
+            {/* YouTube Quality Badge Button */}
             <button
-              onClick={() => {
-                setShowSettingsMenu(!showSettingsMenu);
-                setSettingsTab('quality');
-                setShowSubtitleMenu(false);
-              }}
-              className="px-2 py-1 rounded bg-zinc-800/80 hover:bg-zinc-700 text-red-400 font-mono text-[10px] font-bold border border-red-500/20 transition cursor-pointer"
-              title="Stream Quality"
+              onClick={() => setMenuView(menuView === 'quality' ? 'closed' : 'quality')}
+              className="px-2 py-1 rounded-md bg-zinc-800/90 hover:bg-zinc-700 text-white font-mono text-[11px] font-bold border border-white/10 hover:border-red-500/40 transition cursor-pointer flex items-center gap-1 shadow-sm"
+              title="Change Video Quality"
             >
-              {selectedQuality.label}
+              <span className="text-red-400 font-extrabold">{currentBadgeText}</span>
             </button>
 
-            {/* Subtitles Button */}
+            {/* Subtitles / CC Button */}
             {subtitles.length > 0 && (
               <button
-                onClick={() => {
-                  setShowSubtitleMenu(!showSubtitleMenu);
-                  setShowSettingsMenu(false);
-                }}
+                onClick={() => setMenuView(menuView === 'subtitles' ? 'closed' : 'subtitles')}
                 className={`p-1.5 rounded-lg transition cursor-pointer ${
                   selectedSubtitle !== 'off'
-                    ? 'bg-red-600/30 text-red-400 border border-red-500/40'
-                    : 'hover:bg-white/10 text-zinc-300 hover:text-white'
+                    ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
+                    : 'hover:bg-white/15 text-zinc-300 hover:text-white'
                 }`}
-                title="Subtitles"
+                title="Subtitles / Closed Captions (c)"
               >
                 <Subtitles className="w-4 h-4" />
               </button>
             )}
 
-            {/* Settings (Speed) Button */}
+            {/* Settings Button */}
             <button
-              onClick={() => {
-                setShowSettingsMenu(!showSettingsMenu);
-                setSettingsTab('speed');
-                setShowSubtitleMenu(false);
-              }}
-              className="p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer text-zinc-300 hover:text-white"
-              title="Playback Settings"
+              onClick={() => setMenuView(menuView === 'closed' ? 'main' : 'closed')}
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                menuView !== 'closed'
+                  ? 'bg-white/20 text-white rotate-45'
+                  : 'hover:bg-white/15 text-zinc-300 hover:text-white'
+              }`}
+              title="Settings"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-4 h-4 transition-transform duration-200" />
             </button>
 
             {/* Fullscreen Button */}
             <button
               onClick={toggleFullscreen}
-              className="p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer text-zinc-300 hover:text-white"
-              title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+              className="p-1.5 rounded-lg hover:bg-white/15 transition cursor-pointer text-zinc-300 hover:text-white"
+              title={isFullscreen ? 'Exit Fullscreen (f)' : 'Fullscreen (f)'}
             >
               {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
             </button>
 
-            {/* Quality & Speed Popup Menu */}
-            {showSettingsMenu && (
-              <div className="absolute right-0 bottom-10 z-50 w-48 bg-zinc-900/95 border border-zinc-700/80 rounded-xl shadow-2xl p-2 text-xs backdrop-blur-md animate-in fade-in duration-150 space-y-1">
-                <div className="px-2 py-1 text-[10px] uppercase font-bold text-zinc-400 tracking-wider border-b border-zinc-800">
-                  {settingsTab === 'quality' ? 'Stream Quality' : 'Playback Speed'}
-                </div>
-
-                {settingsTab === 'quality' &&
-                  qualities.map((q) => (
+            {/* YouTube-Style Popover Menu */}
+            {menuView !== 'closed' && (
+              <div className="absolute right-0 bottom-12 z-50 w-64 bg-zinc-950/95 border border-zinc-800 rounded-2xl shadow-2xl p-2 text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 space-y-1">
+                {/* 1. Main Settings Menu */}
+                {menuView === 'main' && (
+                  <>
+                    <div className="px-3 py-1.5 text-[11px] font-bold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
+                      Settings
+                    </div>
+                    {/* Quality Row */}
                     <button
-                      key={q.label}
-                      onClick={() => {
-                        setSelectedQuality(q);
-                        setShowSettingsMenu(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition text-left cursor-pointer ${
-                        selectedQuality.label === q.label
-                          ? 'bg-red-600 text-white font-bold'
-                          : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                      }`}
+                      onClick={() => setMenuView('quality')}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition cursor-pointer"
                     >
-                      <span>{q.label}</span>
-                      {selectedQuality.label === q.label && <Check className="w-3.5 h-3.5" />}
+                      <div className="flex items-center gap-2.5">
+                        <Sliders className="w-4 h-4 text-red-500" />
+                        <span className="font-medium">Quality</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-zinc-400 text-[11px]">
+                        <span className="font-bold text-white">{currentBadgeText}</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </div>
                     </button>
-                  ))}
 
-                {settingsTab === 'speed' &&
-                  [0.5, 0.75, 1, 1.25, 1.5, 2].map((s) => (
+                    {/* Speed Row */}
                     <button
-                      key={s}
-                      onClick={() => handleSpeedChange(s)}
-                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition text-left cursor-pointer ${
-                        playbackSpeed === s
-                          ? 'bg-red-600 text-white font-bold'
-                          : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                      }`}
+                      onClick={() => setMenuView('speed')}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition cursor-pointer"
                     >
-                      <span>{s === 1 ? 'Normal (1x)' : `${s}x`}</span>
-                      {playbackSpeed === s && <Check className="w-3.5 h-3.5" />}
+                      <div className="flex items-center gap-2.5">
+                        <Gauge className="w-4 h-4 text-red-500" />
+                        <span className="font-medium">Playback Speed</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-zinc-400 text-[11px]">
+                        <span>{playbackSpeed === 1 ? 'Normal' : `${playbackSpeed}x`}</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </div>
                     </button>
-                  ))}
-              </div>
-            )}
 
-            {/* Subtitles Popup Menu */}
-            {showSubtitleMenu && (
-              <div className="absolute right-0 bottom-10 z-50 w-44 bg-zinc-900/95 border border-zinc-700/80 rounded-xl shadow-2xl p-2 text-xs backdrop-blur-md animate-in fade-in duration-150 space-y-1">
-                <div className="px-2 py-1 text-[10px] uppercase font-bold text-zinc-400 tracking-wider border-b border-zinc-800">
-                  Subtitles / Captions
-                </div>
-                <button
-                  onClick={() => {
-                    setSelectedSubtitle('off');
-                    setShowSubtitleMenu(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition text-left cursor-pointer ${
-                    selectedSubtitle === 'off'
-                      ? 'bg-red-600 text-white font-bold'
-                      : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                  }`}
-                >
-                  <span>Off</span>
-                  {selectedSubtitle === 'off' && <Check className="w-3.5 h-3.5" />}
-                </button>
-                {subtitles.map((sub) => (
-                  <button
-                    key={sub.language}
-                    onClick={() => {
-                      setSelectedSubtitle(sub.language);
-                      setShowSubtitleMenu(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition text-left cursor-pointer ${
-                      selectedSubtitle === sub.language
-                        ? 'bg-red-600 text-white font-bold'
-                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
-                    }`}
-                  >
-                    <span>{sub.label}</span>
-                    {selectedSubtitle === sub.language && <Check className="w-3.5 h-3.5" />}
-                  </button>
-                ))}
+                    {/* Subtitles Row */}
+                    {subtitles.length > 0 && (
+                      <button
+                        onClick={() => setMenuView('subtitles')}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Subtitles className="w-4 h-4 text-red-500" />
+                          <span className="font-medium">Subtitles</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-zinc-400 text-[11px]">
+                          <span className="capitalize">{selectedSubtitle}</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </div>
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {/* 2. Quality Selection Sub-Menu (YouTube Style) */}
+                {menuView === 'quality' && (
+                  <>
+                    <button
+                      onClick={() => setMenuView('main')}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 text-zinc-400 hover:text-white text-left font-bold text-xs border-b border-zinc-800 mb-1 transition cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Quality for current video</span>
+                    </button>
+
+                    <div className="max-h-60 overflow-y-auto space-y-0.5 pr-1">
+                      {qualities.map((q) => {
+                        const isSelected = selectedQuality.url === q.url;
+                        const is4k = q.label.includes('4K') || q.shortLabel === '4K';
+                        const isHd = q.label.includes('1080') || q.label.includes('720') || q.shortLabel === '1080p' || q.shortLabel === '720p';
+
+                        return (
+                          <button
+                            key={q.url}
+                            onClick={() => handleQualityChange(q)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-left cursor-pointer ${
+                              isSelected
+                                ? 'bg-red-600 text-white font-bold shadow-md shadow-red-600/30'
+                                : 'text-zinc-200 hover:bg-zinc-800/80 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{q.label}</span>
+                              {is4k && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-400/20 text-amber-300 border border-amber-400/30 uppercase">
+                                  4K
+                                </span>
+                              )}
+                              {isHd && !is4k && (
+                                <span className="px-1 py-0.5 rounded text-[9px] font-black bg-blue-500/20 text-blue-300 border border-blue-400/30 uppercase">
+                                  HD
+                                </span>
+                              )}
+                            </div>
+                            {isSelected && <Check className="w-4 h-4 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* 3. Playback Speed Sub-Menu */}
+                {menuView === 'speed' && (
+                  <>
+                    <button
+                      onClick={() => setMenuView('main')}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 text-zinc-400 hover:text-white text-left font-bold text-xs border-b border-zinc-800 mb-1 transition cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Playback Speed</span>
+                    </button>
+
+                    <div className="max-h-60 overflow-y-auto space-y-0.5">
+                      {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => {
+                        const isSelected = playbackSpeed === s;
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => handleSpeedChange(s)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-left cursor-pointer ${
+                              isSelected
+                                ? 'bg-red-600 text-white font-bold'
+                                : 'text-zinc-200 hover:bg-zinc-800/80 hover:text-white'
+                            }`}
+                          >
+                            <span>{s === 1 ? 'Normal (1x)' : `${s}x`}</span>
+                            {isSelected && <Check className="w-4 h-4" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* 4. Subtitles Sub-Menu */}
+                {menuView === 'subtitles' && (
+                  <>
+                    <button
+                      onClick={() => setMenuView('main')}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 text-zinc-400 hover:text-white text-left font-bold text-xs border-b border-zinc-800 mb-1 transition cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Subtitles / Captions</span>
+                    </button>
+
+                    <div className="max-h-60 overflow-y-auto space-y-0.5">
+                      <button
+                        onClick={() => {
+                          setSelectedSubtitle('off');
+                          setMenuView('closed');
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-left cursor-pointer ${
+                          selectedSubtitle === 'off'
+                            ? 'bg-red-600 text-white font-bold'
+                            : 'text-zinc-200 hover:bg-zinc-800/80 hover:text-white'
+                        }`}
+                      >
+                        <span>Off</span>
+                        {selectedSubtitle === 'off' && <Check className="w-4 h-4" />}
+                      </button>
+
+                      {subtitles.map((sub) => {
+                        const isSelected = selectedSubtitle === sub.language;
+                        return (
+                          <button
+                            key={sub.language}
+                            onClick={() => {
+                              setSelectedSubtitle(sub.language);
+                              setMenuView('closed');
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-left cursor-pointer ${
+                              isSelected
+                                ? 'bg-red-600 text-white font-bold'
+                                : 'text-zinc-200 hover:bg-zinc-800/80 hover:text-white'
+                            }`}
+                          >
+                            <span>{sub.label}</span>
+                            {isSelected && <Check className="w-4 h-4" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

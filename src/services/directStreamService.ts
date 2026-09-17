@@ -15,6 +15,8 @@ import {
 
 export interface StreamQuality {
   label: string;
+  shortLabel?: string;
+  resolution?: number;
   url: string;
   isDefault?: boolean;
 }
@@ -97,14 +99,23 @@ export const directStreamService = {
 
       if (febboxData && febboxData.success && Array.isArray(febboxData.qualities) && febboxData.qualities.length > 0) {
         const streamQualities: StreamQuality[] = febboxData.qualities.map((q: any) => ({
-          label: q.label || '1080p HD',
+          label: q.label || '1080p (Full HD)',
+          shortLabel: q.shortLabel || (q.label?.includes('4K') ? '4K' : q.label?.includes('720') ? '720p' : '1080p'),
+          resolution: q.resolution || (q.label?.includes('4K') ? 2160 : q.label?.includes('720') ? 720 : 1080),
           url: q.url,
           isDefault: q.isDefault || false,
         }));
 
+        // Sort descending by resolution (4K -> 1080p -> 720p -> 480p -> 360p)
+        streamQualities.sort((a, b) => (b.resolution || 0) - (a.resolution || 0));
+
         // Ensure at least one default
         if (!streamQualities.some((q) => q.isDefault)) {
-          streamQualities[0].isDefault = true;
+          const defaultChoice =
+            streamQualities.find((q) => q.shortLabel === '1080p') ||
+            streamQualities.find((q) => q.shortLabel === '4K') ||
+            streamQualities[0];
+          if (defaultChoice) defaultChoice.isDefault = true;
         }
 
         const subtitles: SubtitleTrack[] = Array.isArray(febboxData.subtitles)

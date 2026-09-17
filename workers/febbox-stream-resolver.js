@@ -6762,27 +6762,75 @@ function parseVideoQualitiesHtml(html) {
   let match;
   while ((match = regex.exec(html)) !== null) {
     const rawUrl = match[1].replace(/&amp;/g, '&');
-    const qualityTag = match[2] || '';
+    const qualityTag = (match[2] || '').toLowerCase().trim();
     const inner = match[3] || '';
 
     const nameMatch = inner.match(/<p class="name">([^<]+)(?:<span>\(([^<]+)\)<\/span>)?/);
-    const name = nameMatch ? nameMatch[1].trim() : '';
-    const extra = nameMatch && nameMatch[2] ? nameMatch[2].trim() : '';
+    const sizeMatch = inner.match(/<p class="size">([^<]+)<\/p>/);
+    const size = sizeMatch ? sizeMatch[1].trim() : '';
 
-    let label = `${name}${extra ? ` (${extra})` : ''}`;
-    if (qualityTag === 'ORG') {
-      label = 'Original VIP 4K / 1080p (Direct High-Speed)';
-    } else if (qualityTag) {
-      label = `${qualityTag} Adaptive HLS`;
+    let label = '1080p (Full HD)';
+    let shortLabel = '1080p';
+    let resolution = 1080;
+
+    if (qualityTag === 'org') {
+      label = 'Original VIP (Source 4K/1080p Direct)';
+      shortLabel = 'VIP Direct';
+      resolution = 2160;
+    } else if (qualityTag === '4k' || qualityTag === '2160p') {
+      label = '4K (2160p Ultra HD)';
+      shortLabel = '4K';
+      resolution = 2160;
+    } else if (qualityTag === '1440p' || qualityTag === '2k') {
+      label = '1440p (2K QHD)';
+      shortLabel = '1440p';
+      resolution = 1440;
+    } else if (qualityTag === '1080p') {
+      label = '1080p (Full HD)';
+      shortLabel = '1080p';
+      resolution = 1080;
+    } else if (qualityTag === '720p') {
+      label = '720p (HD)';
+      shortLabel = '720p';
+      resolution = 720;
+    } else if (qualityTag === '480p') {
+      label = '480p (SD)';
+      shortLabel = '480p';
+      resolution = 480;
+    } else if (qualityTag === '360p') {
+      label = '360p';
+      shortLabel = '360p';
+      resolution = 360;
+    } else if (nameMatch && nameMatch[1]) {
+      label = `${nameMatch[1].trim()}${size ? ` (${size})` : ''}`;
+      shortLabel = nameMatch[1].trim();
     }
 
     qualities.push({
-      label,
-      quality: qualityTag || name,
+      label: size ? `${label} • ${size}` : label,
+      shortLabel,
+      resolution,
+      quality: qualityTag || shortLabel,
       url: rawUrl,
-      isDefault: qualityTag === 'ORG' || qualityTag === '1080p',
+      size,
+      isDefault: false,
     });
   }
+
+  // Sort descending by resolution (4K -> 1080p -> 720p -> 480p -> 360p)
+  qualities.sort((a, b) => b.resolution - a.resolution);
+
+  // Set default: prefer 1080p or 4K or first available
+  const defaultItem =
+    qualities.find((q) => q.shortLabel === '1080p') ||
+    qualities.find((q) => q.shortLabel === '4K') ||
+    qualities.find((q) => q.shortLabel === 'VIP Direct') ||
+    qualities[0];
+
+  if (defaultItem) {
+    defaultItem.isDefault = true;
+  }
+
   return qualities;
 }
 
