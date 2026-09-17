@@ -19,6 +19,7 @@ import {
   Gauge,
   Sliders,
   Wifi,
+  Sparkles,
 } from 'lucide-react';
 import type { StreamQuality, SubtitleTrack } from '../services/directStreamService';
 import { subtitleService, convertSrtToVttBlob } from '../services/subtitleService';
@@ -68,7 +69,9 @@ function getResolutionNumber(q: StreamQuality): number {
 // Helper to standardize quality label & badge type
 function getFormattedQualityInfo(q: StreamQuality) {
   const res = getResolutionNumber(q);
-  const isVipOrg = (q.shortLabel || q.label || '').toLowerCase().includes('vip') || (q.shortLabel || q.label || '').toLowerCase().includes('org');
+  const isVipOrg =
+    (q.shortLabel || q.label || '').toLowerCase().includes('vip') ||
+    (q.shortLabel || q.label || '').toLowerCase().includes('org');
 
   let cleanLabel = '1080p Full HD';
   let badge: '4k' | 'hd' | 'sd' | 'vip' | null = null;
@@ -120,10 +123,24 @@ export default function NativePlayer({
   onEnded,
   onSwitchToBackup,
 }: NativePlayerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
+
+  // Dual-Video Element Refs for Gapless YouTube-Grade Crossfade
+  const videoRefA = useRef<HTMLVideoElement>(null);
+  const videoRefB = useRef<HTMLVideoElement>(null);
+  const hlsRefA = useRef<Hls | null>(null);
+  const hlsRefB = useRef<Hls | null>(null);
+
+  // Active Video Slot ('A' or 'B')
+  const [activeSlot, setActiveSlot] = useState<'A' | 'B'>('A');
+  const activeSlotRef = useRef<'A' | 'B'>('A');
+  activeSlotRef.current = activeSlot;
+
+  // Track currently active stream URL
+  const currentStreamUrlRef = useRef<string>('');
+  const isInitialLoadedRef = useRef<boolean>(false);
+  const isSwitchingRef = useRef<boolean>(false);
 
   // Standardize & sort available qualities descending (4K -> 1080p -> 720p -> 480p -> 360p)
   const sortedQualities = useMemo(() => {
@@ -140,7 +157,6 @@ export default function NativePlayer({
       };
     });
 
-    // Sort strictly descending by resolution
     list.sort((a, b) => (b.resolution || 0) - (a.resolution || 0));
     return list;
   }, [qualities]);
@@ -155,6 +171,7 @@ export default function NativePlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [isQualitySwitching, setIsQualitySwitching] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
@@ -180,7 +197,6 @@ export default function NativePlayer({
     const p1080 = sortedQualities.find((q) => (q.resolution || 0) === 1080);
     if (p1080) return p1080;
 
-    // Next preference: 720p or 4K or default
     return sortedQualities.find((q) => q.isDefault) || sortedQualities[0] || qualities[0];
   });
 
@@ -196,9 +212,15 @@ export default function NativePlayer({
     }
   }, [subtitles]);
 
-  // If subtitles were empty on start, automatically fetch multi-language subtitles in background
+  // Background subtitle fetch if initially empty
   useEffect(() => {
-    if (loadedSubtitles.length > 0 || !title || title.toLowerCase() === 'loading...' || title.toLowerCase() === 'stream') return;
+    if (
+      loadedSubtitles.length > 0 ||
+      !title ||
+      title.toLowerCase() === 'loading...' ||
+      title.toLowerCase() === 'stream'
+    )
+      return;
     let isMounted = true;
     setIsFetchingSubtitles(true);
 
@@ -221,7 +243,7 @@ export default function NativePlayer({
     };
   }, [title, mediaType, season, episode, releaseYear, loadedSubtitles.length]);
 
-  // Keep selectedQuality synchronized if sortedQualities updates (e.g. new episode / movie)
+  // Keep selectedQuality synchronized if sortedQualities updates
   useEffect(() => {
     if (sortedQualities.length === 0) return;
     const exists = sortedQualities.some((q) => q.url === selectedQuality?.url);
@@ -253,11 +275,20 @@ export default function NativePlayer({
   const [skipIndicator, setSkipIndicator] = useState<{ text: string; side: 'left' | 'right' } | null>(null);
   const skipIndicatorTimerRef = useRef<number | null>(null);
 
-  // Smart Network Adaptation Toast Notification
-  const [networkToast, setNetworkToast] = useState<string | null>(null);
+  // Smart Network Toast Notification
+  const [networkToast, setNetworkToast] = useState<{ message: string; isQuality?: boolean } | null>(null);
   const networkToastTimerRef = useRef<number | null>(null);
 
-  // Seamless Quality Switching Trackers & Mutable Refs
+  // Active getters helper
+  const getActiveVideo = useCallback(() => {
+    return activeSlotRef.current === 'A' ? videoRefA.current : videoRefB.current;
+  }, []);
+
+  const getInactiveVideo = useCallback(() => {
+    return activeSlotRef.current === 'A' ? videoRefB.current : videoRefA.current;
+  }, []);
+
+  // Playback Refs for stable state tracking
   const savedPlaybackTimeRef = useRef<number>(startAt);
   const shouldResumePlayRef = useRef<boolean>(true);
   const hideControlsTimerRef = useRef<number | null>(null);
@@ -265,8 +296,8 @@ export default function NativePlayer({
   const stallCountRef = useRef<number>(0);
   const stallTimerRef = useRef<number | null>(null);
   const waitingDebounceTimerRef = useRef<number | null>(null);
+  const smoothPlaybackSecondsRef = useRef<number>(0);
 
-  // Keep fresh mutable refs for callbacks to avoid re-triggering effects
   const onProgressUpdateRef = useRef(onProgressUpdate);
   onProgressUpdateRef.current = onProgressUpdate;
   const onEndedRef = useRef(onEnded);
@@ -284,74 +315,270 @@ export default function NativePlayer({
   currentTimeRef.current = currentTime;
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
+  const playbackSpeedRef = useRef(playbackSpeed);
+  playbackSpeedRef.current = playbackSpeed;
 
-  const showNetworkToast = (message: string) => {
-    setNetworkToast(message);
+  const showNetworkToast = useCallback((message: string, isQuality: boolean = false) => {
+    setNetworkToast({ message, isQuality });
     if (networkToastTimerRef.current) clearTimeout(networkToastTimerRef.current);
     networkToastTimerRef.current = window.setTimeout(() => {
       setNetworkToast(null);
-    }, 3800);
-  };
+    }, 3200);
+  }, []);
 
-  // Step down quality gracefully when internet connection is slow or buffering stalls (STABLE callback)
+  // Step down quality adaptively when internet is slow or buffering stalls
   const stepDownQuality = useCallback(
     (reason: string = 'slow connection') => {
       const currentQ = selectedQualityRef.current;
       if (!currentQ) return;
       const currentRes = getResolutionNumber(currentQ);
-      // Find lower qualities available
       const lowerQualities = sortedQualitiesRef.current.filter((q) => (q.resolution || 0) < currentRes);
 
       if (lowerQualities.length > 0) {
-        // Pick the closest lower quality (e.g. 4K -> 1080p, 1080p -> 720p, 720p -> 480p)
         const nextLower = lowerQualities[0];
-        const video = videoRef.current;
-        const currentPos = video ? video.currentTime : savedPlaybackTimeRef.current;
-        const wasPlaying = video ? !video.paused : isPlayingRef.current;
-
-        savedPlaybackTimeRef.current = currentPos;
-        shouldResumePlayRef.current = wasPlaying;
-
         setSelectedQuality(nextLower);
-        showNetworkToast(`⚡ Switched to ${nextLower.shortLabel || 'lower resolution'} due to ${reason}`);
+        showNetworkToast(`⚡ Auto: Switched to ${nextLower.shortLabel || 'lower resolution'} (${reason})`, true);
       }
     },
-    []
+    [showNetworkToast]
   );
 
-  // Initialize or Switch Video Stream (Seamless position restoration like YouTube)
+  // Step up quality adaptively when connection is healthy and smooth
+  const stepUpQuality = useCallback(() => {
+    if (!isAutoQualityRef.current) return;
+    const currentQ = selectedQualityRef.current;
+    if (!currentQ) return;
+    const currentRes = getResolutionNumber(currentQ);
+    if (currentRes >= 1080) return; // Already at 1080p or 4K
+
+    // Find 1080p or higher
+    const higherQualities = sortedQualitiesRef.current.filter(
+      (q) => (q.resolution || 0) > currentRes && (q.resolution || 0) <= 1080
+    );
+
+    if (higherQualities.length > 0) {
+      const nextHigher = higherQualities[higherQualities.length - 1] || higherQualities[0];
+      setSelectedQuality(nextHigher);
+      showNetworkToast(`⚡ Auto: Upgraded to ${nextHigher.shortLabel || '1080p HD'} (Connection Fast)`, true);
+    }
+  }, [showNetworkToast]);
+
+  // Main Seamless Dual-Buffer Stream Loader & Quality Switcher
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !selectedQuality?.url) return;
+    const targetQuality = selectedQuality;
+    if (!targetQuality?.url) return;
 
-    setHasError(false);
-    setIsLoading(true);
+    const streamUrl = targetQuality.url;
+    if (currentStreamUrlRef.current === streamUrl) return;
 
-    const streamUrl = selectedQuality.url;
     const isHlsStream = streamUrl.includes('.m3u8') || streamUrl.includes('m3u8');
-    const targetSeekTime = savedPlaybackTimeRef.current;
 
-    let retryCount = 0;
-    let loadTimeout: number | null = window.setTimeout(() => {
-      if (video.readyState < 2) {
-        // If high quality timed out loading, try step down before showing full error
-        const currentRes = getResolutionNumber(selectedQualityRef.current);
-        if (currentRes > 720) {
-          stepDownQuality('network timeout');
-        } else {
-          setIsLoading(false);
-          setHasError(true);
+    // 1. Initial Cold Load Path
+    if (!isInitialLoadedRef.current) {
+      setIsLoading(true);
+      setHasError(false);
+      currentStreamUrlRef.current = streamUrl;
+
+      const videoA = videoRefA.current;
+      if (!videoA) return;
+
+      let initialTimeout: number | null = window.setTimeout(() => {
+        if (videoA.readyState < 2) {
+          const currentRes = getResolutionNumber(targetQuality);
+          if (currentRes > 720) {
+            stepDownQuality('network timeout');
+          } else {
+            setIsLoading(false);
+            setHasError(true);
+          }
         }
-      }
-    }, 14000);
+      }, 14000);
 
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
+      if (hlsRefA.current) {
+        hlsRefA.current.destroy();
+        hlsRefA.current = null;
+      }
+
+      if (isHlsStream && Hls.isSupported()) {
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          backBufferLength: 90,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+        });
+
+        hlsRefA.current = hls;
+        hls.loadSource(streamUrl);
+        hls.attachMedia(videoA);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (initialTimeout) clearTimeout(initialTimeout);
+          setIsLoading(false);
+          setHasError(false);
+          isInitialLoadedRef.current = true;
+          stallCountRef.current = 0;
+
+          if (startAt > 0) {
+            videoA.currentTime = startAt;
+          }
+
+          videoA
+            .play()
+            .then(() => setIsPlaying(true))
+            .catch(() => setIsPlaying(false));
+        });
+
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (data.fatal) {
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              hls.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hls.recoverMediaError();
+            } else {
+              if (initialTimeout) clearTimeout(initialTimeout);
+              hls.destroy();
+              setHasError(true);
+              setIsLoading(false);
+            }
+          }
+        });
+      } else {
+        videoA.src = streamUrl;
+        videoA.load();
+
+        const onInitialReady = () => {
+          if (initialTimeout) clearTimeout(initialTimeout);
+          setIsLoading(false);
+          setHasError(false);
+          isInitialLoadedRef.current = true;
+          stallCountRef.current = 0;
+
+          if (startAt > 0) {
+            videoA.currentTime = startAt;
+          }
+
+          videoA
+            .play()
+            .then(() => setIsPlaying(true))
+            .catch(() => setIsPlaying(false));
+        };
+
+        const onInitialError = () => {
+          if (initialTimeout) clearTimeout(initialTimeout);
+          const currentRes = getResolutionNumber(targetQuality);
+          if (currentRes > 720) {
+            stepDownQuality('stream error');
+          } else {
+            setHasError(true);
+            setIsLoading(false);
+          }
+        };
+
+        videoA.addEventListener('loadedmetadata', onInitialReady, { once: true });
+        videoA.addEventListener('error', onInitialError, { once: true });
+      }
+
+      return () => {
+        if (initialTimeout) clearTimeout(initialTimeout);
+      };
     }
 
+    // 2. Seamless Hot Quality Switch Path (Gapless Dual-Buffer Transition)
+    // The active video keeps playing uninterrupted while the background video buffers the new quality!
+    isSwitchingRef.current = true;
+    setIsQualitySwitching(true);
+
+    const activeSlotCurrent = activeSlotRef.current;
+    const inactiveSlot = activeSlotCurrent === 'A' ? 'B' : 'A';
+    const activeVid = activeSlotCurrent === 'A' ? videoRefA.current : videoRefB.current;
+    const inactiveVid = inactiveSlot === 'B' ? videoRefB.current : videoRefA.current;
+
+    if (!activeVid || !inactiveVid) return;
+
+    const currentPos = activeVid.currentTime || savedPlaybackTimeRef.current || 0;
+    const wasPlaying = !activeVid.paused;
+
+    // Check if active HLS instance supports native multi-level bitrate switching
+    const activeHls = activeSlotCurrent === 'A' ? hlsRefA.current : hlsRefB.current;
+    if (activeHls && activeHls.levels && activeHls.levels.length > 1) {
+      const targetRes = getResolutionNumber(targetQuality);
+      const levelIdx = activeHls.levels.findIndex(
+        (lvl) => lvl.height === targetRes || Math.abs(lvl.height - targetRes) <= 60
+      );
+
+      if (levelIdx !== -1) {
+        // Native 0ms HLS level switch within the same element
+        activeHls.currentLevel = levelIdx;
+        currentStreamUrlRef.current = streamUrl;
+        isSwitchingRef.current = false;
+        setIsQualitySwitching(false);
+        showNetworkToast(`⚡ Quality: ${targetQuality.shortLabel || 'Updated'}`, true);
+        return;
+      }
+    }
+
+    // Prepare Inactive Video in background
+    inactiveVid.muted = true; // Mute strictly during background loading to prevent audio doubling
+    inactiveVid.playbackRate = activeVid.playbackRate || 1;
+
+    // Clean up previous HLS instance on inactive slot if any
+    if (inactiveSlot === 'B' && hlsRefB.current) {
+      hlsRefB.current.destroy();
+      hlsRefB.current = null;
+    } else if (inactiveSlot === 'A' && hlsRefA.current) {
+      hlsRefA.current.destroy();
+      hlsRefA.current = null;
+    }
+
+    let isSwapped = false;
+
+    // Atomic Seamless Swap Trigger
+    const executeSeamlessSwap = () => {
+      if (isSwapped) return;
+      isSwapped = true;
+
+      // Resync timestamp to ensure frame-perfect continuity
+      const liveCurrentTime = activeVid.currentTime;
+      if (liveCurrentTime > 0 && Math.abs(inactiveVid.currentTime - liveCurrentTime) > 0.25) {
+        inactiveVid.currentTime = liveCurrentTime;
+      }
+
+      // Transfer audio smoothly
+      inactiveVid.muted = isMutedRef.current;
+      inactiveVid.volume = volumeRef.current;
+
+      // Silence & pause previous active video
+      activeVid.muted = true;
+      activeVid.pause();
+
+      // Clean up previous HLS / stream
+      if (activeSlotCurrent === 'A' && hlsRefA.current) {
+        hlsRefA.current.destroy();
+        hlsRefA.current = null;
+      } else if (activeSlotCurrent === 'B' && hlsRefB.current) {
+        hlsRefB.current.destroy();
+        hlsRefB.current = null;
+      }
+
+      activeVid.removeAttribute('src');
+      activeVid.load();
+
+      // Toggle active slot with smooth 300ms CSS crossfade
+      setActiveSlot(inactiveSlot);
+      activeSlotRef.current = inactiveSlot;
+      currentStreamUrlRef.current = streamUrl;
+      isSwitchingRef.current = false;
+      setIsQualitySwitching(false);
+      showNetworkToast(`⚡ Quality: ${targetQuality.shortLabel || 'Updated'}`, true);
+    };
+
     if (isHlsStream && Hls.isSupported()) {
-      const hls = new Hls({
+      const newHls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
         backBufferLength: 90,
@@ -359,129 +586,89 @@ export default function NativePlayer({
         maxMaxBufferLength: 60,
       });
 
-      hlsRef.current = hls;
-      hls.loadSource(streamUrl);
-      hls.attachMedia(video);
+      if (inactiveSlot === 'B') hlsRefB.current = newHls;
+      else hlsRefA.current = newHls;
 
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (loadTimeout) clearTimeout(loadTimeout);
-        setIsLoading(false);
-        setHasError(false);
-        stallCountRef.current = 0;
+      newHls.loadSource(streamUrl);
+      newHls.attachMedia(inactiveVid);
 
-        if (targetSeekTime > 0) {
-          video.currentTime = targetSeekTime;
-        }
-
-        if (shouldResumePlayRef.current) {
-          video.play().catch(() => setIsPlaying(false));
+      newHls.on(Hls.Events.MANIFEST_PARSED, () => {
+        inactiveVid.currentTime = activeVid.currentTime || currentPos;
+        if (wasPlaying) {
+          inactiveVid
+            .play()
+            .then(() => executeSeamlessSwap())
+            .catch(() => executeSeamlessSwap());
+        } else {
+          executeSeamlessSwap();
         }
       });
 
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              if (retryCount < 1) {
-                retryCount++;
-                hls.startLoad();
-              } else {
-                // Network error: step down quality if possible
-                if (loadTimeout) clearTimeout(loadTimeout);
-                hls.destroy();
-                const currentRes = getResolutionNumber(selectedQualityRef.current);
-                if (currentRes > 720) {
-                  stepDownQuality('network instability');
-                } else {
-                  setHasError(true);
-                  setIsLoading(false);
-                }
-              }
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
-              break;
-            default:
-              if (loadTimeout) clearTimeout(loadTimeout);
-              hls.destroy();
-              setHasError(true);
-              setIsLoading(false);
-              break;
-          }
+      newHls.on(Hls.Events.ERROR, (_evt, errData) => {
+        if (errData.fatal) {
+          newHls.destroy();
+          isSwitchingRef.current = false;
+          setIsQualitySwitching(false);
         }
       });
     } else {
-      // Direct MP4 VIP Stream or Native Safari HLS
-      video.src = streamUrl;
-      video.load();
-
-      const onLoadedMetadata = () => {
-        if (loadTimeout) clearTimeout(loadTimeout);
-        setIsLoading(false);
-        setHasError(false);
-        stallCountRef.current = 0;
-
-        if (targetSeekTime > 0) {
-          video.currentTime = targetSeekTime;
-        }
-
-        if (shouldResumePlayRef.current) {
-          video.play().catch(() => setIsPlaying(false));
-        }
-      };
+      // Direct MP4 / VIP Stream
+      inactiveVid.src = streamUrl;
+      inactiveVid.load();
 
       const onCanPlay = () => {
-        if (loadTimeout) clearTimeout(loadTimeout);
-        setIsLoading(false);
-        setHasError(false);
+        inactiveVid.currentTime = activeVid.currentTime || currentPos;
+        if (wasPlaying) {
+          inactiveVid
+            .play()
+            .then(() => executeSeamlessSwap())
+            .catch(() => executeSeamlessSwap());
+        } else {
+          executeSeamlessSwap();
+        }
       };
 
       const onError = () => {
-        if (loadTimeout) clearTimeout(loadTimeout);
-        // If error on 4K/VIP, try step down before failing
-        const currentRes = getResolutionNumber(selectedQualityRef.current);
-        if (currentRes > 720) {
-          stepDownQuality('stream error');
-        } else {
-          setHasError(true);
-          setIsLoading(false);
-        }
+        isSwitchingRef.current = false;
+        setIsQualitySwitching(false);
       };
 
-      video.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
-      video.addEventListener('canplay', onCanPlay, { once: true });
-      video.addEventListener('error', onError, { once: true });
+      inactiveVid.addEventListener('canplay', onCanPlay, { once: true });
+      inactiveVid.addEventListener('error', onError, { once: true });
     }
+  }, [selectedQuality, startAt, stepDownQuality, showNetworkToast]);
 
+  // Clean up on unmount
+  useEffect(() => {
     return () => {
-      if (loadTimeout) clearTimeout(loadTimeout);
+      if (hlsRefA.current) hlsRefA.current.destroy();
+      if (hlsRefB.current) hlsRefB.current.destroy();
+      if (networkToastTimerRef.current) clearTimeout(networkToastTimerRef.current);
+      if (skipIndicatorTimerRef.current) clearTimeout(skipIndicatorTimerRef.current);
+      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
       if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
       if (waitingDebounceTimerRef.current) clearTimeout(waitingDebounceTimerRef.current);
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
     };
-  }, [selectedQuality?.url, stepDownQuality]);
+  }, []);
 
   // Handle Manual Quality Selection (Persistent memory saved in localStorage)
   const handleQualityChange = (newQuality: StreamQuality, isAuto: boolean = false) => {
-    const video = videoRef.current;
+    const video = getActiveVideo();
     const currentPos = video ? video.currentTime : currentTime;
     const wasPlaying = video ? !video.paused : isPlaying;
 
     savedPlaybackTimeRef.current = currentPos;
     shouldResumePlayRef.current = wasPlaying;
     stallCountRef.current = 0;
+    smoothPlaybackSecondsRef.current = 0;
 
     setIsAutoQuality(isAuto);
 
     if (isAuto) {
       localStorage.setItem(PREFERRED_QUALITY_KEY, 'auto');
-      // In auto mode, pick 1080p if available
       const p1080 = sortedQualities.find((q) => (q.resolution || 0) === 1080) || sortedQualities[0];
       setSelectedQuality(p1080);
-      showNetworkToast('⚡ Auto quality enabled (Adaptive)');
+      showNetworkToast('⚡ Auto Quality Enabled (Adaptive)', true);
     } else {
       const shortPref = newQuality.shortLabel || '1080p';
       localStorage.setItem(PREFERRED_QUALITY_KEY, shortPref.toLowerCase());
@@ -493,30 +680,34 @@ export default function NativePlayer({
 
   // Monitor playback buffering/stalls to trigger smart YouTube auto-downgrade
   const handleWaiting = () => {
-    // Debounce setting isLoading so transient sub-second buffering does not flash the spinner
+    // If switching qualities in background, do not flash spinner
+    if (isSwitchingRef.current) return;
+
     if (waitingDebounceTimerRef.current) clearTimeout(waitingDebounceTimerRef.current);
     waitingDebounceTimerRef.current = window.setTimeout(() => {
-      if (videoRef.current && videoRef.current.readyState < 3) {
+      const activeVid = getActiveVideo();
+      if (activeVid && activeVid.readyState < 3 && !isSwitchingRef.current) {
         setIsLoading(true);
       }
-    }, 300);
+    }, 450);
 
-    // If stall lasts longer than 4.5 seconds on high quality (4K / 1080p), adaptively step down
+    // If stall lasts longer than 3.5 seconds on high quality (4K / 1080p), adaptively step down
     if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
     stallTimerRef.current = window.setTimeout(() => {
-      if (videoRef.current && videoRef.current.readyState < 3) {
+      const activeVid = getActiveVideo();
+      if (activeVid && activeVid.readyState < 3) {
         stallCountRef.current += 1;
         const currentRes = getResolutionNumber(selectedQualityRef.current);
         if (currentRes > 480 && (isAutoQualityRef.current || stallCountRef.current >= 2)) {
           stepDownQuality('buffering delay');
         }
       }
-    }, 4500);
+    }, 3500);
   };
 
   // Video Time & Buffer Updates
   const handleTimeUpdate = () => {
-    const video = videoRef.current;
+    const video = getActiveVideo();
     if (!video) return;
 
     const current = video.currentTime;
@@ -525,7 +716,6 @@ export default function NativePlayer({
     if (dur && dur > 0) setDuration(dur);
     savedPlaybackTimeRef.current = current;
 
-    // Clear any pending waiting debounce timer and spinner if video is playing smoothly
     if (waitingDebounceTimerRef.current) {
       clearTimeout(waitingDebounceTimerRef.current);
       waitingDebounceTimerRef.current = null;
@@ -538,7 +728,19 @@ export default function NativePlayer({
     if (video.buffered.length > 0) {
       for (let i = 0; i < video.buffered.length; i++) {
         if (video.buffered.start(i) <= current && current <= video.buffered.end(i)) {
-          setBufferedEnd(video.buffered.end(i));
+          const bEnd = video.buffered.end(i);
+          setBufferedEnd(bEnd);
+
+          // Smart Auto Step-up check (if healthy buffer > 18s and smooth playback for 45s)
+          if (isAutoQualityRef.current && bEnd - current > 18 && !video.paused) {
+            smoothPlaybackSecondsRef.current += 0.25;
+            if (smoothPlaybackSecondsRef.current >= 45) {
+              smoothPlaybackSecondsRef.current = 0;
+              stepUpQuality();
+            }
+          } else {
+            smoothPlaybackSecondsRef.current = 0;
+          }
           break;
         }
       }
@@ -548,16 +750,19 @@ export default function NativePlayer({
   };
 
   const handlePlayPause = useCallback(() => {
-    const video = videoRef.current;
+    const video = getActiveVideo();
     if (!video) return;
 
     if (video.paused) {
-      video.play().then(() => setIsPlaying(true)).catch(() => {});
+      video
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => {});
     } else {
       video.pause();
       setIsPlaying(false);
     }
-  }, []);
+  }, [getActiveVideo]);
 
   const triggerSkipFeedback = (text: string, side: 'left' | 'right') => {
     setSkipIndicator({ text, side });
@@ -568,23 +773,34 @@ export default function NativePlayer({
   };
 
   const handleSkip = (seconds: number) => {
-    const video = videoRef.current;
+    const video = getActiveVideo();
     if (!video) return;
     const newTime = Math.max(0, Math.min(video.currentTime + seconds, duration));
     video.currentTime = newTime;
     setCurrentTime(newTime);
     savedPlaybackTimeRef.current = newTime;
+
+    const inactive = getInactiveVideo();
+    if (inactive && isSwitchingRef.current) {
+      inactive.currentTime = newTime;
+    }
+
     triggerSkipFeedback(seconds > 0 ? `+${seconds}s` : `${seconds}s`, seconds > 0 ? 'right' : 'left');
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const video = videoRef.current;
+    const video = getActiveVideo();
     if (!video || !duration) return;
 
     const newTime = (Number(e.target.value) / 100) * duration;
     video.currentTime = newTime;
     setCurrentTime(newTime);
     savedPlaybackTimeRef.current = newTime;
+
+    const inactive = getInactiveVideo();
+    if (inactive && isSwitchingRef.current) {
+      inactive.currentTime = newTime;
+    }
   };
 
   const handleMouseMoveProgressBar = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -601,26 +817,32 @@ export default function NativePlayer({
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const video = videoRef.current;
-    if (!video) return;
-
     const val = Number(e.target.value);
-    video.volume = val;
     setVolume(val);
     setIsMuted(val === 0);
+
+    const video = getActiveVideo();
+    if (video) {
+      video.volume = val;
+      video.muted = val === 0;
+    }
   };
 
   const toggleMute = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
+    const video = getActiveVideo();
     if (isMuted) {
-      video.muted = false;
-      video.volume = volume || 0.5;
+      const newVol = volume || 0.5;
       setIsMuted(false);
+      setVolume(newVol);
+      if (video) {
+        video.muted = false;
+        video.volume = newVol;
+      }
     } else {
-      video.muted = true;
       setIsMuted(true);
+      if (video) {
+        video.muted = true;
+      }
     }
   };
 
@@ -638,10 +860,11 @@ export default function NativePlayer({
   };
 
   const handleSpeedChange = (speed: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.playbackRate = speed;
     setPlaybackSpeed(speed);
+    const video = getActiveVideo();
+    if (video) video.playbackRate = speed;
+    const inactive = getInactiveVideo();
+    if (inactive) inactive.playbackRate = speed;
     setMenuView('closed');
   };
 
@@ -701,7 +924,6 @@ export default function NativePlayer({
     const isLeft = clickX < rect.width / 2;
 
     if (now - lastTouchTimeRef.current < 300) {
-      // Double click/tap detected
       handleSkip(isLeft ? -10 : 10);
     } else {
       handlePlayPause();
@@ -753,35 +975,41 @@ export default function NativePlayer({
           e.preventDefault();
           handleSkip(5);
           break;
-        case 'arrowup':
+        case 'arrowup': {
           e.preventDefault();
-          if (videoRef.current) {
-            const newVol = Math.min(1, (videoRef.current.volume || 0) + 0.05);
-            videoRef.current.volume = newVol;
-            setVolume(newVol);
-            setIsMuted(false);
+          const newVol = Math.min(1, volumeRef.current + 0.05);
+          setVolume(newVol);
+          setIsMuted(false);
+          const v = getActiveVideo();
+          if (v) {
+            v.volume = newVol;
+            v.muted = false;
           }
           break;
-        case 'arrowdown':
+        }
+        case 'arrowdown': {
           e.preventDefault();
-          if (videoRef.current) {
-            const newVol = Math.max(0, (videoRef.current.volume || 0) - 0.05);
-            videoRef.current.volume = newVol;
-            setVolume(newVol);
-            setIsMuted(newVol === 0);
+          const newVol = Math.max(0, volumeRef.current - 0.05);
+          setVolume(newVol);
+          setIsMuted(newVol === 0);
+          const v = getActiveVideo();
+          if (v) {
+            v.volume = newVol;
+            v.muted = newVol === 0;
           }
           break;
+        }
         case '>':
-          if (e.shiftKey && videoRef.current) {
+          if (e.shiftKey) {
             const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-            const next = speeds.find((s) => s > playbackSpeed) || 2;
+            const next = speeds.find((s) => s > playbackSpeedRef.current) || 2;
             handleSpeedChange(next);
           }
           break;
         case '<':
-          if (e.shiftKey && videoRef.current) {
+          if (e.shiftKey) {
             const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-            const prev = [...speeds].reverse().find((s) => s < playbackSpeed) || 0.25;
+            const prev = [...speeds].reverse().find((s) => s < playbackSpeedRef.current) || 0.25;
             handleSpeedChange(prev);
           }
           break;
@@ -794,42 +1022,47 @@ export default function NativePlayer({
         case '6':
         case '7':
         case '8':
-        case '9':
-          if (duration > 0 && videoRef.current) {
+        case '9': {
+          if (duration > 0) {
             const percent = Number(e.key) / 10;
             const newPos = percent * duration;
-            videoRef.current.currentTime = newPos;
+            const v = getActiveVideo();
+            if (v) v.currentTime = newPos;
             setCurrentTime(newPos);
             savedPlaybackTimeRef.current = newPos;
           }
           break;
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handlePlayPause, playbackSpeed, duration, subtitles, selectedSubtitle]);
+  }, [handlePlayPause, duration, getActiveVideo]);
 
-  // Synchronize Subtitle TextTracks with selectedSubtitle state
+  // Synchronize Subtitle TextTracks across both video elements
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !video.textTracks) return;
-
-    for (let i = 0; i < video.textTracks.length; i++) {
-      const track = video.textTracks[i];
-      if (selectedSubtitle === 'off') {
-        track.mode = 'disabled';
-      } else if (
-        track.language === selectedSubtitle ||
-        track.label.toLowerCase() === selectedSubtitle.toLowerCase() ||
-        (selectedSubtitle.startsWith('en') && track.language.startsWith('en'))
-      ) {
-        track.mode = 'showing';
-      } else {
-        track.mode = 'disabled';
+    const syncTracksForVideo = (vid: HTMLVideoElement | null) => {
+      if (!vid || !vid.textTracks) return;
+      for (let i = 0; i < vid.textTracks.length; i++) {
+        const track = vid.textTracks[i];
+        if (selectedSubtitle === 'off') {
+          track.mode = 'disabled';
+        } else if (
+          track.language === selectedSubtitle ||
+          track.label.toLowerCase() === selectedSubtitle.toLowerCase() ||
+          (selectedSubtitle.startsWith('en') && track.language.startsWith('en'))
+        ) {
+          track.mode = 'showing';
+        } else {
+          track.mode = 'disabled';
+        }
       }
-    }
-  }, [selectedSubtitle, loadedSubtitles]);
+    };
+
+    syncTracksForVideo(videoRefA.current);
+    syncTracksForVideo(videoRefB.current);
+  }, [selectedSubtitle, loadedSubtitles, activeSlot]);
 
   // Active Quality Badge Display in Bottom Bar (e.g. "Auto (1080p)", "4K", "1080p")
   const currentBadgeText = isAutoQuality
@@ -846,33 +1079,39 @@ export default function NativePlayer({
       onMouseLeave={() => isPlaying && setShowControls(false)}
       className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group select-none flex items-center justify-center font-sans"
     >
-      {/* HTML5 Video Element with WebVTT Subtitle Tracks */}
+      {/* Dual Video Elements with Seamless 300ms Crossfade Transition */}
+
+      {/* Video Slot A */}
       <video
-        ref={videoRef}
+        ref={videoRefA}
         title={title}
         aria-label={title}
         crossOrigin="anonymous"
-        onTimeUpdate={handleTimeUpdate}
-        onWaiting={handleWaiting}
+        playsInline
+        onTimeUpdate={activeSlot === 'A' ? handleTimeUpdate : undefined}
+        onWaiting={activeSlot === 'A' ? handleWaiting : undefined}
         onPlaying={() => {
-          if (waitingDebounceTimerRef.current) {
-            clearTimeout(waitingDebounceTimerRef.current);
-            waitingDebounceTimerRef.current = null;
+          if (activeSlot === 'A') {
+            if (waitingDebounceTimerRef.current) {
+              clearTimeout(waitingDebounceTimerRef.current);
+              waitingDebounceTimerRef.current = null;
+            }
+            setIsLoading(false);
+            setIsPlaying(true);
+            if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
           }
-          setIsLoading(false);
-          setIsPlaying(true);
-          if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
         }}
-        onPause={() => setIsPlaying(false)}
-        onEnded={() => onEndedRef.current?.()}
+        onPause={() => activeSlot === 'A' && setIsPlaying(false)}
+        onEnded={() => activeSlot === 'A' && onEndedRef.current?.()}
         onClick={handleVideoClick}
         onDoubleClick={toggleFullscreen}
-        className="w-full h-full object-contain cursor-pointer"
-        playsInline
+        className={`absolute inset-0 w-full h-full object-contain cursor-pointer transition-opacity duration-300 ${
+          activeSlot === 'A' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+        }`}
       >
         {loadedSubtitles.map((sub) => (
           <track
-            key={`${sub.language}-${sub.url}`}
+            key={`A-${sub.language}-${sub.url}`}
             kind="subtitles"
             src={sub.url}
             srcLang={sub.language}
@@ -882,11 +1121,63 @@ export default function NativePlayer({
         ))}
       </video>
 
-      {/* Smart Network Toast Notification (YouTube Style) */}
+      {/* Video Slot B */}
+      <video
+        ref={videoRefB}
+        title={title}
+        aria-label={title}
+        crossOrigin="anonymous"
+        playsInline
+        onTimeUpdate={activeSlot === 'B' ? handleTimeUpdate : undefined}
+        onWaiting={activeSlot === 'B' ? handleWaiting : undefined}
+        onPlaying={() => {
+          if (activeSlot === 'B') {
+            if (waitingDebounceTimerRef.current) {
+              clearTimeout(waitingDebounceTimerRef.current);
+              waitingDebounceTimerRef.current = null;
+            }
+            setIsLoading(false);
+            setIsPlaying(true);
+            if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
+          }
+        }}
+        onPause={() => activeSlot === 'B' && setIsPlaying(false)}
+        onEnded={() => activeSlot === 'B' && onEndedRef.current?.()}
+        onClick={handleVideoClick}
+        onDoubleClick={toggleFullscreen}
+        className={`absolute inset-0 w-full h-full object-contain cursor-pointer transition-opacity duration-300 ${
+          activeSlot === 'B' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+        }`}
+      >
+        {loadedSubtitles.map((sub) => (
+          <track
+            key={`B-${sub.language}-${sub.url}`}
+            kind="subtitles"
+            src={sub.url}
+            srcLang={sub.language}
+            label={sub.label}
+            default={selectedSubtitle === sub.language}
+          />
+        ))}
+      </video>
+
+      {/* Smart Network / Quality Toast Notification (Non-intrusive Top Banner) */}
       {networkToast && (
         <div className="absolute top-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900/95 text-white text-xs font-semibold shadow-2xl border border-zinc-700/80 backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-200">
-          <Wifi className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span>{networkToast}</span>
+          {networkToast.isQuality ? (
+            <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          ) : (
+            <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          )}
+          <span>{networkToast.message}</span>
+        </div>
+      )}
+
+      {/* Subtle Quality Prebuffering Indicator Pill */}
+      {isQualitySwitching && !networkToast && (
+        <div className="absolute top-5 right-5 z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/80 text-white text-[11px] font-medium shadow-lg border border-zinc-700/60 backdrop-blur-md animate-pulse">
+          <div className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+          <span>Switching Quality...</span>
         </div>
       )}
 
@@ -906,8 +1197,8 @@ export default function NativePlayer({
         </div>
       )}
 
-      {/* Loading Spinner */}
-      {isLoading && !hasError && (
+      {/* Cold-Start Initial Loading Spinner Only (Never during smooth quality switch) */}
+      {isLoading && !hasError && !isQualitySwitching && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none z-20">
           <div className="w-14 h-14 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin shadow-xl" />
         </div>
@@ -938,9 +1229,8 @@ export default function NativePlayer({
               onClick={() => {
                 setHasError(false);
                 setIsLoading(true);
-                if (videoRef.current) {
-                  videoRef.current.load();
-                }
+                const active = getActiveVideo();
+                if (active) active.load();
               }}
               className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
             >
@@ -955,7 +1245,7 @@ export default function NativePlayer({
       {!isPlaying && !isLoading && !hasError && (
         <button
           onClick={handlePlayPause}
-          className="absolute inset-0 flex items-center justify-center bg-black/30 transition cursor-pointer z-10"
+          className="absolute inset-0 flex items-center justify-center bg-black/30 transition cursor-pointer z-20"
         >
           <div className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-2xl transform scale-100 hover:scale-110 transition duration-200 ring-4 ring-red-600/30">
             <Play className="w-7 h-7 fill-white ml-1" />
