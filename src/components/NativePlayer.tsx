@@ -681,6 +681,27 @@ export default function NativePlayer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handlePlayPause, playbackSpeed, duration, subtitles, selectedSubtitle]);
 
+  // Synchronize Subtitle TextTracks with selectedSubtitle state
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !video.textTracks) return;
+
+    for (let i = 0; i < video.textTracks.length; i++) {
+      const track = video.textTracks[i];
+      if (selectedSubtitle === 'off') {
+        track.mode = 'disabled';
+      } else if (
+        track.language === selectedSubtitle ||
+        track.label.toLowerCase() === selectedSubtitle.toLowerCase() ||
+        (selectedSubtitle.startsWith('en') && track.language.startsWith('en'))
+      ) {
+        track.mode = 'showing';
+      } else {
+        track.mode = 'disabled';
+      }
+    }
+  }, [selectedSubtitle, subtitles]);
+
   // Active Quality Badge Display in Bottom Bar (e.g. "Auto (1080p)", "4K", "1080p")
   const currentBadgeText = isAutoQuality
     ? `Auto (${selectedQuality.shortLabel || '1080p'})`
@@ -696,11 +717,12 @@ export default function NativePlayer({
       onMouseLeave={() => isPlaying && setShowControls(false)}
       className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group select-none flex items-center justify-center font-sans"
     >
-      {/* HTML5 Video Element */}
+      {/* HTML5 Video Element with WebVTT Subtitle Tracks */}
       <video
         ref={videoRef}
         title={title}
         aria-label={title}
+        crossOrigin="anonymous"
         onTimeUpdate={handleTimeUpdate}
         onWaiting={handleWaiting}
         onPlaying={() => {
@@ -714,7 +736,18 @@ export default function NativePlayer({
         onDoubleClick={toggleFullscreen}
         className="w-full h-full object-contain cursor-pointer"
         playsInline
-      />
+      >
+        {subtitles.map((sub) => (
+          <track
+            key={sub.url}
+            kind="subtitles"
+            src={sub.url}
+            srcLang={sub.language}
+            label={sub.label}
+            default={selectedSubtitle === sub.language}
+          />
+        ))}
+      </video>
 
       {/* Smart Network Toast Notification (YouTube Style) */}
       {networkToast && (

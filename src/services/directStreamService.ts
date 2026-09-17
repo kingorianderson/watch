@@ -12,6 +12,7 @@ import {
   type Stream,
   type ProviderControls,
 } from '@movie-web/providers';
+import { subtitleService } from './subtitleService';
 
 export interface StreamQuality {
   label: string;
@@ -118,7 +119,7 @@ export const directStreamService = {
           if (defaultChoice) defaultChoice.isDefault = true;
         }
 
-        const subtitles: SubtitleTrack[] = Array.isArray(febboxData.subtitles)
+        let subtitles: SubtitleTrack[] = Array.isArray(febboxData.subtitles)
           ? febboxData.subtitles.map((s: any) => ({
               label: s.label || s.language || 'English',
               language: s.language || 'en',
@@ -126,6 +127,15 @@ export const directStreamService = {
               isDefault: s.isDefault || false,
             }))
           : [];
+
+        // Fallback to subtitleService if worker returned no subtitles
+        if (subtitles.length === 0) {
+          try {
+            subtitles = await subtitleService.getSubtitles(cleanTitle, isTv ? 'tv' : 'movie', season, episode, year);
+          } catch (subErr) {
+            console.warn('Subtitle fallback error:', subErr);
+          }
+        }
 
         return {
           title: febboxData.title || cleanTitle,

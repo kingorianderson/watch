@@ -54,3 +54,17 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* YouTube & Netflix Subtitle Styling */
+video::cue {
+  background-color: rgba(0, 0, 0, 0.78);
+  color: #ffffff;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 1.12rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+

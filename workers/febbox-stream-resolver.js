@@ -1,11 +1,11 @@
 /**
- * Cloudflare Worker: FebBox & ShowBox 4K Native Direct Stream Resolver
+ * Cloudflare Worker: FebBox & ShowBox 4K Native Direct Stream Resolver + Multi-Language Subtitles
  * Endpoint: https://febbox-resolver.kingzart254.workers.dev
  * 
  * Functions:
  * 1. Resolves high-speed 4K/1080p VIP Direct MP4 & Adaptive HLS (.m3u8) streams for Movies & TV Shows
- * 2. Acts as High-Speed CORS Streaming Proxy for video segments & WebVTT subtitles
- * 3. Pre-configured with authenticated VIP session token
+ * 2. Fetches & serves multi-language WebVTT subtitles (English, Spanish, French, German, Arabic, Portuguese, etc.)
+ * 3. Acts as High-Speed CORS Streaming & Decompression Proxy for video segments & subtitles
  */
 
 // Embedded CryptoJS library for standalone execution in Cloudflare Workers
@@ -6769,16 +6769,16 @@ function parseVideoQualitiesHtml(html) {
     const sizeMatch = inner.match(/<p class="size">([^<]+)<\/p>/);
     const size = sizeMatch ? sizeMatch[1].trim() : '';
 
-    let label = '1080p (Full HD)';
+    let label = '1080p Full HD';
     let shortLabel = '1080p';
     let resolution = 1080;
 
     if (qualityTag === 'org') {
-      label = 'Original VIP (Source 4K/1080p Direct)';
+      label = 'Original VIP (Source Direct)';
       shortLabel = 'VIP Direct';
       resolution = 2160;
     } else if (qualityTag === '4k' || qualityTag === '2160p') {
-      label = '4K (2160p Ultra HD)';
+      label = '4K Ultra HD (2160p)';
       shortLabel = '4K';
       resolution = 2160;
     } else if (qualityTag === '1440p' || qualityTag === '2k') {
@@ -6786,15 +6786,15 @@ function parseVideoQualitiesHtml(html) {
       shortLabel = '1440p';
       resolution = 1440;
     } else if (qualityTag === '1080p') {
-      label = '1080p (Full HD)';
+      label = '1080p Full HD';
       shortLabel = '1080p';
       resolution = 1080;
     } else if (qualityTag === '720p') {
-      label = '720p (HD)';
+      label = '720p HD';
       shortLabel = '720p';
       resolution = 720;
     } else if (qualityTag === '480p') {
-      label = '480p (SD)';
+      label = '480p SD';
       shortLabel = '480p';
       resolution = 480;
     } else if (qualityTag === '360p') {
@@ -6817,10 +6817,10 @@ function parseVideoQualitiesHtml(html) {
     });
   }
 
-  // Sort descending by resolution (4K -> 1080p -> 720p -> 480p -> 360p)
+  // Sort strictly descending by resolution (4K -> 1080p -> 720p -> 480p -> 360p)
   qualities.sort((a, b) => b.resolution - a.resolution);
 
-  // Set default: prefer 1080p or 4K or first available
+  // Default to 1080p if available
   const defaultItem =
     qualities.find((q) => q.shortLabel === '1080p') ||
     qualities.find((q) => q.shortLabel === '4K') ||
@@ -6834,7 +6834,69 @@ function parseVideoQualitiesHtml(html) {
   return qualities;
 }
 
-async function resolveFebBoxStream({ title, type = 'movie', season = 1, episode = 1, year, uiCookie = DEFAULT_UI_COOKIE }) {
+// Multi-language Subtitles Search using OpenSubtitles
+async function fetchSubtitles({ title, type, season = 1, episode = 1, year, host }) {
+  try {
+    const isTv = type === 'tv' || type === 'show';
+    const cleanTitle = (title || '').trim();
+    if (!cleanTitle) return [];
+
+    let queryUrl = '';
+    if (isTv) {
+      const sPad = String(season).padStart(2, '0');
+      const ePad = String(episode).padStart(2, '0');
+      queryUrl = `https://rest.opensubtitles.org/search/query-${encodeURIComponent(`${cleanTitle} s${sPad}e${ePad}`)}`;
+    } else {
+      queryUrl = `https://rest.opensubtitles.org/search/query-${encodeURIComponent(`${cleanTitle} ${year || ''}`.trim())}`;
+    }
+
+    const res = await fetch(queryUrl, {
+      headers: {
+        'User-Agent': 'VLCMediaPlayer 3.0.18',
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return [];
+
+    // Deduplicate languages and select highest quality subtitle for each language
+    const languageMap = new Map();
+
+    for (const sub of data) {
+      if (!sub.SubDownloadLink) continue;
+      const langName = sub.LanguageName || 'English';
+      const langIso = (sub.SubLanguageID || sub.ISO639 || 'en').toLowerCase();
+
+      // Only take first / best verified subtitle per language
+      if (!languageMap.has(langIso)) {
+        const proxySubUrl = `https://${host}/?sub_url=${encodeURIComponent(sub.SubDownloadLink)}`;
+        languageMap.set(langIso, {
+          label: langName,
+          language: langIso,
+          url: proxySubUrl,
+          isDefault: langIso === 'eng' || langIso === 'en',
+        });
+      }
+    }
+
+    const subtitles = Array.from(languageMap.values());
+    // Sort English first, then alphabetical
+    subtitles.sort((a, b) => {
+      if (a.isDefault) return -1;
+      if (b.isDefault) return 1;
+      return a.label.localeCompare(b.label);
+    });
+
+    return subtitles;
+  } catch (err) {
+    console.warn('Subtitle fetch error:', err);
+    return [];
+  }
+}
+
+async function resolveFebBoxStream({ title, type = 'movie', season = 1, episode = 1, year, uiCookie = DEFAULT_UI_COOKIE, host = 'febbox-resolver.kingzart254.workers.dev' }) {
   const isTv = type === 'tv' || type === 'show';
   const showboxType = isTv ? 'tv' : 'movie';
   const cleanTitle = (title || '').trim();
@@ -6961,20 +7023,20 @@ async function resolveFebBoxStream({ title, type = 'movie', season = 1, episode 
     targetFid = epFile.fid;
   }
 
-  // 3. Fetch Qualities from FebBox
-  const qualRes = await fetch(
-    `https://www.febbox.com/console/video_quality_list?fid=${targetFid}`,
-    {
+  // 3. Fetch Qualities & Subtitles in parallel
+  const [qualRes, subtitles] = await Promise.all([
+    fetch(`https://www.febbox.com/console/video_quality_list?fid=${targetFid}`, {
       headers: {
         'Cookie': `ui=${uiCookie}`,
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Referer': `https://www.febbox.com/share/${shareKey}`,
         'x-requested-with': 'XMLHttpRequest',
       },
-    }
-  );
-  const qualData = await qualRes.json();
-  const rawHtml = qualData?.html || '';
+    }).then((r) => r.json()),
+    fetchSubtitles({ title: bestItem.title, type, season, episode, year: bestItem.year, host }),
+  ]);
+
+  const rawHtml = qualRes?.html || '';
   const qualities = parseVideoQualitiesHtml(rawHtml);
 
   if (qualities.length === 0) {
@@ -6989,7 +7051,7 @@ async function resolveFebBoxStream({ title, type = 'movie', season = 1, episode 
     shareKey,
     sourceName: 'Native 4K VIP Engine (Zero Ads)',
     qualities,
-    subtitles: [],
+    subtitles,
   };
 }
 
@@ -7009,7 +7071,60 @@ export default {
 
     const url = new URL(request.url);
 
-    // 1. CORS Streaming Proxy for Segments & Subtitles
+    // 1. Subtitle Decompression & WebVTT Converter Proxy
+    const subUrl = url.searchParams.get('sub_url');
+    if (subUrl) {
+      try {
+        const decodedSubUrl = decodeURIComponent(subUrl);
+        const subRes = await fetch(decodedSubUrl, {
+          headers: {
+            'User-Agent': 'VLCMediaPlayer 3.0.18',
+            'Accept': '*/*',
+          },
+        });
+
+        if (!subRes.ok) {
+          return new Response('WEBVTT\n\n1\n00:00:00.000 --> 00:00:05.000\nSubtitle unavailable', {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'text/vtt; charset=utf-8' },
+          });
+        }
+
+        const buffer = await subRes.arrayBuffer();
+        const uint8 = new Uint8Array(buffer);
+        let text = '';
+
+        if (uint8[0] === 0x1f && uint8[1] === 0x8b) {
+          // Gzip compressed from OpenSubtitles
+          const stream = new Response(buffer).body.pipeThrough(new DecompressionStream('gzip'));
+          text = await new Response(stream).text();
+        } else {
+          text = new TextDecoder().decode(buffer);
+        }
+
+        // Convert SRT to WebVTT
+        let vtt = 'WEBVTT\n\n' + text
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n')
+          .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+
+        return new Response(vtt, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/vtt; charset=utf-8',
+            'Cache-Control': 'public, max-age=86400',
+          },
+        });
+      } catch (subErr) {
+        return new Response('WEBVTT\n\n', {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'text/vtt; charset=utf-8' },
+        });
+      }
+    }
+
+    // 2. CORS Video Segment Streaming Proxy
     const targetUrl = url.searchParams.get('url') || url.searchParams.get('destination');
     if (targetUrl) {
       try {
@@ -7042,7 +7157,7 @@ export default {
       }
     }
 
-    // 2. Direct Media Resolution
+    // 3. Direct Media & Subtitle Resolution
     const title = url.searchParams.get('title');
     const tmdbId = url.searchParams.get('tmdbId') || url.searchParams.get('id');
     const type = url.searchParams.get('type') || 'movie';
@@ -7055,11 +7170,11 @@ export default {
       return new Response(
         JSON.stringify({
           status: 'online',
-          service: 'FebBox & ShowBox 4K Native Direct Stream Resolver',
+          service: 'FebBox & ShowBox 4K Native Direct Stream Resolver + Multi-Language Subtitles',
           usage: {
             movie: '/?title=Fight+Club&year=1999&type=movie',
             tv: '/?title=Stranger+Things&type=tv&season=1&episode=1',
-            proxy: '/?url=https://example.com/video.mp4',
+            subtitle: '/?sub_url=https://dl.opensubtitles.org/...',
           },
         }),
         {
@@ -7077,6 +7192,7 @@ export default {
         episode: Number(episode),
         year,
         uiCookie: customUiCookie,
+        host: url.host,
       });
 
       return new Response(JSON.stringify(result), {
@@ -7091,7 +7207,7 @@ export default {
           title: title || tmdbId,
         }),
         {
-          status: 200, // Return 200 with success: false so client can seamlessly fall back
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
