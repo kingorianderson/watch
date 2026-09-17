@@ -198,7 +198,7 @@ export default function NativePlayer({
 
   // If subtitles were empty on start, automatically fetch multi-language subtitles in background
   useEffect(() => {
-    if (loadedSubtitles.length > 0 || !title) return;
+    if (loadedSubtitles.length > 0 || !title || title.toLowerCase() === 'loading...' || title.toLowerCase() === 'stream') return;
     let isMounted = true;
     setIsFetchingSubtitles(true);
 

@@ -7128,11 +7128,21 @@ export default {
     const targetUrl = url.searchParams.get('url') || url.searchParams.get('destination');
     if (targetUrl) {
       try {
-        const decodedUrl = decodeURIComponent(targetUrl);
-        const headers = new Headers(request.headers);
-        headers.delete('host');
-        headers.delete('origin');
-        headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+        let decodedUrl = targetUrl;
+        try {
+          if (decodedUrl.includes('%3A') || decodedUrl.includes('%2F')) {
+            decodedUrl = decodeURIComponent(decodedUrl);
+          }
+        } catch (_) {}
+
+        const targetObj = new URL(decodedUrl);
+        const headers = new Headers();
+        headers.set('Host', targetObj.host);
+        headers.set('User-Agent', 'VLCMediaPlayer 3.0.18');
+        headers.set('Accept', '*/*');
+        if (request.headers.get('Range')) {
+          headers.set('Range', request.headers.get('Range'));
+        }
 
         const response = await fetch(decodedUrl, {
           method: request.method,

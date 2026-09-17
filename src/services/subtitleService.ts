@@ -1,6 +1,7 @@
 /**
  * Multi-Language Subtitle Resolver Service
- * Queries OpenSubtitles REST API and provides on-the-fly WebVTT decompression and conversion.
+ * Queries OpenSubtitles REST API with fallback cascade and provides
+ * on-the-fly WebVTT decompression and blob URL conversion.
  */
 
 import type { SubtitleTrack } from './directStreamService';
@@ -9,7 +10,7 @@ const WORKER_ENDPOINT = 'https://febbox-resolver.kingzart254.workers.dev';
 const vttBlobCache = new Map<string, string>();
 
 /**
- * Decompresses GZIP / reads raw text and converts SRT to clean WebVTT
+ * Decompresses GZIP / reads raw text and converts SRT to clean WebVTT blob URL
  */
 export async function convertSrtToVttBlob(downloadUrl: string): Promise<string> {
   if (vttBlobCache.has(downloadUrl)) {
@@ -18,21 +19,21 @@ export async function convertSrtToVttBlob(downloadUrl: string): Promise<string> 
 
   try {
     let res: Response;
-    // 1. Try direct fetch (dl.opensubtitles.org supports CORS with access-control-allow-origin: *)
+    // 1. Try direct fetch (dl.opensubtitles.org sends access-control-allow-origin: *)
     try {
       res = await fetch(downloadUrl, {
         headers: {
           'Accept': '*/*',
         },
       });
-      if (!res.ok) throw new Error(`Direct fetch status: ${res.status}`);
+      if (!res.ok) throw new Error(`Direct status: ${res.status}`);
     } catch (_) {
       // 2. Fallback to Cloudflare Worker proxy
       const proxyUrl = `${WORKER_ENDPOINT}/?url=${encodeURIComponent(downloadUrl)}`;
       res = await fetch(proxyUrl);
     }
 
-    if (!res.ok) throw new Error(`Failed to load subtitle from ${downloadUrl}`);
+    if (!res.ok) throw new Error(`Failed to load subtitle file`);
 
     const buffer = await res.arrayBuffer();
     const uint8 = new Uint8Array(buffer);
@@ -59,7 +60,7 @@ export async function convertSrtToVttBlob(downloadUrl: string): Promise<string> 
       text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
     }
 
-    // Convert SRT timestamp format (00:00:00,000) to WebVTT (00:00:00.000)
+    // Convert SRT timestamp format (00:00:00,000) to WebVTT format (00:00:00.000)
     let vtt = text
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n')
@@ -80,6 +81,40 @@ export async function convertSrtToVttBlob(downloadUrl: string): Promise<string> 
   }
 }
 
+async function queryOpenSubtitles(searchQuery: string): Promise<any[]> {
+  const osUrl = `https://rest.opensubtitles.org/search/${searchQuery}`;
+  const proxyUrl = `${WORKER_ENDPOINT}/?url=${encodeURIComponent(osUrl)}`;
+
+  // 1. Try via proxy
+  try {
+    const res = await fetch(proxyUrl, {
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (_) {}
+
+  // 2. Try direct fetch
+  try {
+    const res = await fetch(osUrl, {
+      headers: {
+        'User-Agent': 'VLCMediaPlayer 3.0.18',
+        'Accept': 'application/json',
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (_) {}
+
+  return [];
+}
+
 export const subtitleService = {
   /**
    * Fetch multi-language subtitles for a movie or TV episode
@@ -92,51 +127,41 @@ export const subtitleService = {
     year?: number
   ): Promise<SubtitleTrack[]> {
     try {
-      const cleanTitle = (title || '').trim();
-      if (!cleanTitle) return [];
+      const rawTitle = (title || '').trim();
+      if (!rawTitle || rawTitle.toLowerCase() === 'loading...' || rawTitle.toLowerCase() === 'loading' || rawTitle.toLowerCase() === 'stream') {
+        return [];
+      }
+
+      const clean = rawTitle.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!clean) return [];
 
       const isTv = type === 'tv';
-      let searchParam = '';
+      const queries: string[] = [];
 
       if (isTv) {
         const sPad = String(season).padStart(2, '0');
         const ePad = String(episode).padStart(2, '0');
-        searchParam = `query-${encodeURIComponent(`${cleanTitle} s${sPad}e${ePad}`)}`;
+        queries.push(`query-${encodeURIComponent(`${clean} s${sPad}e${ePad}`)}`);
+        queries.push(`query-${encodeURIComponent(`${clean} season ${season} episode ${episode}`)}`);
+        queries.push(`query-${encodeURIComponent(clean)}`);
       } else {
-        searchParam = `query-${encodeURIComponent(`${cleanTitle} ${year || ''}`.trim())}`;
-      }
-
-      const osUrl = `https://rest.opensubtitles.org/search/${searchParam}`;
-      const proxyUrl = `${WORKER_ENDPOINT}/?url=${encodeURIComponent(osUrl)}`;
-
-      let data: any = null;
-      try {
-        const res = await fetch(proxyUrl, {
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
-        if (res.ok) {
-          data = await res.json();
+        if (year) {
+          queries.push(`query-${encodeURIComponent(`${clean} ${year}`)}`);
         }
-      } catch (err) {
-        console.warn('Error querying OpenSubtitles proxy:', err);
+        queries.push(`query-${encodeURIComponent(clean)}`);
       }
 
-      // If initial search with year returned nothing for movie, retry with title only
-      if ((!Array.isArray(data) || data.length === 0) && !isTv) {
-        try {
-          const fallbackUrl = `https://rest.opensubtitles.org/search/query-${encodeURIComponent(cleanTitle)}`;
-          const res = await fetch(`${WORKER_ENDPOINT}/?url=${encodeURIComponent(fallbackUrl)}`);
-          if (res.ok) data = await res.json();
-        } catch (_) {}
+      let rawData: any[] = [];
+      for (const q of queries) {
+        rawData = await queryOpenSubtitles(q);
+        if (rawData.length > 0) break;
       }
 
-      if (!Array.isArray(data) || data.length === 0) return [];
+      if (rawData.length === 0) return [];
 
       const languageMap = new Map<string, SubtitleTrack>();
 
-      for (const sub of data) {
+      for (const sub of rawData) {
         if (!sub.SubDownloadLink) continue;
         const langName = sub.LanguageName || 'English';
         const langIso = (sub.SubLanguageID || sub.ISO639 || 'en').toLowerCase();
@@ -145,7 +170,7 @@ export const subtitleService = {
           languageMap.set(langIso, {
             label: langName,
             language: langIso,
-            url: sub.SubDownloadLink, // Raw download link, converted to VTT blob on demand
+            url: sub.SubDownloadLink,
             downloadUrl: sub.SubDownloadLink,
             isDefault: langIso === 'eng' || langIso === 'en',
           });
@@ -160,7 +185,7 @@ export const subtitleService = {
         return a.label.localeCompare(b.label);
       });
 
-      // Pre-convert the default (English) subtitle to a WebVTT blob in background for instant display
+      // Pre-convert default (English) subtitle to WebVTT blob in background
       const defaultSub = subtitles.find((s) => s.isDefault) || subtitles[0];
       if (defaultSub && defaultSub.downloadUrl) {
         convertSrtToVttBlob(defaultSub.downloadUrl).then((blobUrl) => {

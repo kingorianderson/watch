@@ -94,6 +94,11 @@ export default function VideoPlayer({
   // Resolve direct HLS stream metadata when Server 1 is active
   useEffect(() => {
     if (currentServer.isNativeHls) {
+      if (!title || title === 'Loading...' || title === 'Stream') {
+        setIsLoading(true);
+        return;
+      }
+
       let isMounted = true;
       setIsLoading(true);
       setNativeScrapeFailed(false);
