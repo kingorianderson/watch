@@ -21,11 +21,16 @@ import {
   Wifi,
 } from 'lucide-react';
 import type { StreamQuality, SubtitleTrack } from '../services/directStreamService';
+import { subtitleService, convertSrtToVttBlob } from '../services/subtitleService';
 
 interface NativePlayerProps {
   qualities: StreamQuality[];
   subtitles?: SubtitleTrack[];
   title: string;
+  mediaType?: 'movie' | 'tv';
+  season?: number;
+  episode?: number;
+  releaseYear?: number;
   startAt?: number;
   onProgressUpdate?: (currentTime: number, duration: number) => void;
   onEnded?: () => void;
@@ -106,6 +111,10 @@ export default function NativePlayer({
   qualities,
   subtitles = [],
   title,
+  mediaType = 'movie',
+  season = 1,
+  episode = 1,
+  releaseYear,
   startAt = 0,
   onProgressUpdate,
   onEnded,
@@ -175,7 +184,42 @@ export default function NativePlayer({
     return sortedQualities.find((q) => q.isDefault) || sortedQualities[0] || qualities[0];
   });
 
+  // Subtitle State & Dynamic Fetching
+  const [loadedSubtitles, setLoadedSubtitles] = useState<SubtitleTrack[]>(subtitles || []);
+  const [isFetchingSubtitles, setIsFetchingSubtitles] = useState<boolean>(false);
   const [selectedSubtitle, setSelectedSubtitle] = useState<string>('off');
+
+  // Sync loadedSubtitles if parent passes new subtitles
+  useEffect(() => {
+    if (subtitles && subtitles.length > 0) {
+      setLoadedSubtitles(subtitles);
+    }
+  }, [subtitles]);
+
+  // If subtitles were empty on start, automatically fetch multi-language subtitles in background
+  useEffect(() => {
+    if (loadedSubtitles.length > 0 || !title) return;
+    let isMounted = true;
+    setIsFetchingSubtitles(true);
+
+    subtitleService
+      .getSubtitles(title, mediaType, season, episode, releaseYear)
+      .then((subs) => {
+        if (isMounted && subs.length > 0) {
+          setLoadedSubtitles(subs);
+        }
+      })
+      .catch((err) => {
+        console.warn('Background subtitle fetch failed:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsFetchingSubtitles(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [title, mediaType, season, episode, releaseYear, loadedSubtitles.length]);
 
   // Keep selectedQuality synchronized if sortedQualities updates (e.g. new episode / movie)
   useEffect(() => {
@@ -601,13 +645,39 @@ export default function NativePlayer({
     setMenuView('closed');
   };
 
+  const handleSubtitleSelect = async (lang: string) => {
+    if (lang === 'off') {
+      setSelectedSubtitle('off');
+      setMenuView('closed');
+      return;
+    }
+
+    setSelectedSubtitle(lang);
+    setMenuView('closed');
+
+    const targetSub = loadedSubtitles.find((s) => s.language === lang);
+    if (targetSub && targetSub.downloadUrl && !targetSub.url.startsWith('blob:')) {
+      try {
+        const blobUrl = await convertSrtToVttBlob(targetSub.downloadUrl);
+        setLoadedSubtitles((prev) =>
+          prev.map((s) => (s.language === lang ? { ...s, url: blobUrl } : s))
+        );
+      } catch (err) {
+        console.warn('Subtitle blob conversion error:', err);
+      }
+    }
+  };
+
   const toggleCaptionsQuick = () => {
-    if (subtitles.length === 0) return;
     if (selectedSubtitle !== 'off') {
       setSelectedSubtitle('off');
     } else {
-      const defaultSub = subtitles.find((s) => s.isDefault) || subtitles[0];
-      setSelectedSubtitle(defaultSub ? defaultSub.language : 'off');
+      const defaultSub = loadedSubtitles.find((s) => s.isDefault) || loadedSubtitles[0];
+      if (defaultSub) {
+        handleSubtitleSelect(defaultSub.language);
+      } else {
+        setMenuView('subtitles');
+      }
     }
   };
 
@@ -759,7 +829,7 @@ export default function NativePlayer({
         track.mode = 'disabled';
       }
     }
-  }, [selectedSubtitle, subtitles]);
+  }, [selectedSubtitle, loadedSubtitles]);
 
   // Active Quality Badge Display in Bottom Bar (e.g. "Auto (1080p)", "4K", "1080p")
   const currentBadgeText = isAutoQuality
@@ -800,9 +870,9 @@ export default function NativePlayer({
         className="w-full h-full object-contain cursor-pointer"
         playsInline
       >
-        {subtitles.map((sub) => (
+        {loadedSubtitles.map((sub) => (
           <track
-            key={sub.url}
+            key={`${sub.language}-${sub.url}`}
             kind="subtitles"
             src={sub.url}
             srcLang={sub.language}
@@ -1024,20 +1094,22 @@ export default function NativePlayer({
               )}
             </button>
 
-            {/* Subtitles / CC Button */}
-            {subtitles.length > 0 && (
-              <button
-                onClick={() => setMenuView(menuView === 'subtitles' ? 'closed' : 'subtitles')}
-                className={`p-1.5 rounded-lg transition cursor-pointer ${
-                  selectedSubtitle !== 'off'
-                    ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
-                    : 'hover:bg-white/15 text-zinc-300 hover:text-white'
-                }`}
-                title="Subtitles / Closed Captions (c)"
-              >
-                <Subtitles className="w-4 h-4" />
-              </button>
-            )}
+            {/* Subtitles / CC Button (Always Visible on Control Bar like YouTube) */}
+            <button
+              onClick={toggleCaptionsQuick}
+              className={`p-1.5 rounded-lg transition cursor-pointer flex items-center justify-center ${
+                selectedSubtitle !== 'off'
+                  ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
+                  : 'hover:bg-white/15 text-zinc-300 hover:text-white'
+              }`}
+              title={
+                selectedSubtitle !== 'off'
+                  ? `Subtitles: ${selectedSubtitle.toUpperCase()} (Click to toggle off, c)`
+                  : 'Subtitles / Closed Captions (c)'
+              }
+            >
+              <Subtitles className="w-4 h-4" />
+            </button>
 
             {/* Settings Button */}
             <button
@@ -1100,22 +1172,20 @@ export default function NativePlayer({
                       </div>
                     </button>
 
-                    {/* Subtitles Row */}
-                    {subtitles.length > 0 && (
-                      <button
-                        onClick={() => setMenuView('subtitles')}
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Subtitles className="w-4 h-4 text-red-500" />
-                          <span className="font-medium">Subtitles</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-zinc-400 text-[11px]">
-                          <span className="capitalize">{selectedSubtitle}</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </div>
-                      </button>
-                    )}
+                    {/* Subtitles Row (Always Available) */}
+                    <button
+                      onClick={() => setMenuView('subtitles')}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Subtitles className="w-4 h-4 text-red-500" />
+                        <span className="font-medium">Subtitles</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-zinc-400 text-[11px]">
+                        <span className="capitalize">{selectedSubtitle}</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </div>
+                    </button>
                   </>
                 )}
 
@@ -1237,12 +1307,9 @@ export default function NativePlayer({
                       <span>Subtitles / Captions</span>
                     </button>
 
-                    <div className="max-h-60 overflow-y-auto space-y-0.5">
+                    <div className="max-h-60 overflow-y-auto space-y-0.5 pr-1">
                       <button
-                        onClick={() => {
-                          setSelectedSubtitle('off');
-                          setMenuView('closed');
-                        }}
+                        onClick={() => handleSubtitleSelect('off')}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-left cursor-pointer ${
                           selectedSubtitle === 'off'
                             ? 'bg-red-600 text-white font-bold'
@@ -1253,15 +1320,12 @@ export default function NativePlayer({
                         {selectedSubtitle === 'off' && <Check className="w-4 h-4" />}
                       </button>
 
-                      {subtitles.map((sub) => {
+                      {loadedSubtitles.map((sub) => {
                         const isSelected = selectedSubtitle === sub.language;
                         return (
                           <button
                             key={sub.language}
-                            onClick={() => {
-                              setSelectedSubtitle(sub.language);
-                              setMenuView('closed');
-                            }}
+                            onClick={() => handleSubtitleSelect(sub.language)}
                             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-left cursor-pointer ${
                               isSelected
                                 ? 'bg-red-600 text-white font-bold'
@@ -1273,6 +1337,12 @@ export default function NativePlayer({
                           </button>
                         );
                       })}
+
+                      {loadedSubtitles.length === 0 && (
+                        <div className="p-3 text-center text-zinc-400 text-xs">
+                          {isFetchingSubtitles ? 'Searching multi-language subtitles...' : 'No subtitles found for this title'}
+                        </div>
+                      )}
                     </div>
                   </>
                 )}

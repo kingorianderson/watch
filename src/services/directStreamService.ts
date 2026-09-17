@@ -26,6 +26,7 @@ export interface SubtitleTrack {
   label: string;
   language: string;
   url: string;
+  downloadUrl?: string;
   isDefault?: boolean;
 }
 
@@ -205,12 +206,21 @@ export const directStreamService = {
             }
           }
 
-          const subtitles: SubtitleTrack[] = (stream.captions || []).map((c) => ({
+          let subtitles: SubtitleTrack[] = (stream.captions || []).map((c) => ({
             label: `${c.language.toUpperCase()} ${c.type ? `[${c.type.toUpperCase()}]` : ''}`,
             language: c.language,
             url: c.url,
             isDefault: c.language.toLowerCase().startsWith('en'),
           }));
+
+          // Fallback to subtitleService if scraper cluster returned no captions
+          if (subtitles.length === 0) {
+            try {
+              subtitles = await subtitleService.getSubtitles(cleanTitle, isTv ? 'tv' : 'movie', season, episode, year);
+            } catch (subErr) {
+              console.warn('Subtitle fallback error for scraper cluster:', subErr);
+            }
+          }
 
           if (qualities.length > 0) {
             return {

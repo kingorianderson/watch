@@ -1,11 +1,84 @@
 /**
  * Multi-Language Subtitle Resolver Service
- * Queries OpenSubtitles REST API through the Cloudflare proxy and converts subtitles to WebVTT.
+ * Queries OpenSubtitles REST API and provides on-the-fly WebVTT decompression and conversion.
  */
 
 import type { SubtitleTrack } from './directStreamService';
 
 const WORKER_ENDPOINT = 'https://febbox-resolver.kingzart254.workers.dev';
+const vttBlobCache = new Map<string, string>();
+
+/**
+ * Decompresses GZIP / reads raw text and converts SRT to clean WebVTT
+ */
+export async function convertSrtToVttBlob(downloadUrl: string): Promise<string> {
+  if (vttBlobCache.has(downloadUrl)) {
+    return vttBlobCache.get(downloadUrl)!;
+  }
+
+  try {
+    let res: Response;
+    // 1. Try direct fetch (dl.opensubtitles.org supports CORS with access-control-allow-origin: *)
+    try {
+      res = await fetch(downloadUrl, {
+        headers: {
+          'Accept': '*/*',
+        },
+      });
+      if (!res.ok) throw new Error(`Direct fetch status: ${res.status}`);
+    } catch (_) {
+      // 2. Fallback to Cloudflare Worker proxy
+      const proxyUrl = `${WORKER_ENDPOINT}/?url=${encodeURIComponent(downloadUrl)}`;
+      res = await fetch(proxyUrl);
+    }
+
+    if (!res.ok) throw new Error(`Failed to load subtitle from ${downloadUrl}`);
+
+    const buffer = await res.arrayBuffer();
+    const uint8 = new Uint8Array(buffer);
+    let text = '';
+
+    if (uint8.length >= 2 && uint8[0] === 0x1f && uint8[1] === 0x8b) {
+      // Gzip compressed from OpenSubtitles
+      try {
+        if (typeof DecompressionStream !== 'undefined') {
+          const ds = new DecompressionStream('gzip');
+          const stream = new Response(buffer).body?.pipeThrough(ds);
+          if (stream) {
+            text = await new Response(stream).text();
+          } else {
+            text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+          }
+        } else {
+          text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+        }
+      } catch (decompErr) {
+        text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+      }
+    } else {
+      text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+    }
+
+    // Convert SRT timestamp format (00:00:00,000) to WebVTT (00:00:00.000)
+    let vtt = text
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+
+    if (!vtt.startsWith('WEBVTT')) {
+      vtt = 'WEBVTT\n\n' + vtt;
+    }
+
+    const blob = new Blob([vtt], { type: 'text/vtt;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    vttBlobCache.set(downloadUrl, blobUrl);
+    return blobUrl;
+  } catch (err) {
+    console.warn('VTT conversion error for URL:', downloadUrl, err);
+    const emptyBlob = new Blob(['WEBVTT\n\n'], { type: 'text/vtt;charset=utf-8' });
+    return URL.createObjectURL(emptyBlob);
+  }
+}
 
 export const subtitleService = {
   /**
@@ -36,14 +109,29 @@ export const subtitleService = {
       const osUrl = `https://rest.opensubtitles.org/search/${searchParam}`;
       const proxyUrl = `${WORKER_ENDPOINT}/?url=${encodeURIComponent(osUrl)}`;
 
-      const res = await fetch(proxyUrl, {
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
+      let data: any = null;
+      try {
+        const res = await fetch(proxyUrl, {
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch (err) {
+        console.warn('Error querying OpenSubtitles proxy:', err);
+      }
 
-      if (!res.ok) return [];
-      const data = await res.json();
+      // If initial search with year returned nothing for movie, retry with title only
+      if ((!Array.isArray(data) || data.length === 0) && !isTv) {
+        try {
+          const fallbackUrl = `https://rest.opensubtitles.org/search/query-${encodeURIComponent(cleanTitle)}`;
+          const res = await fetch(`${WORKER_ENDPOINT}/?url=${encodeURIComponent(fallbackUrl)}`);
+          if (res.ok) data = await res.json();
+        } catch (_) {}
+      }
+
       if (!Array.isArray(data) || data.length === 0) return [];
 
       const languageMap = new Map<string, SubtitleTrack>();
@@ -54,22 +142,31 @@ export const subtitleService = {
         const langIso = (sub.SubLanguageID || sub.ISO639 || 'en').toLowerCase();
 
         if (!languageMap.has(langIso)) {
-          const vttUrl = `${WORKER_ENDPOINT}/?sub_url=${encodeURIComponent(sub.SubDownloadLink)}`;
           languageMap.set(langIso, {
             label: langName,
             language: langIso,
-            url: vttUrl,
+            url: sub.SubDownloadLink, // Raw download link, converted to VTT blob on demand
+            downloadUrl: sub.SubDownloadLink,
             isDefault: langIso === 'eng' || langIso === 'en',
           });
         }
       }
 
       const subtitles = Array.from(languageMap.values());
+      // Sort English first, then alphabetical by language label
       subtitles.sort((a, b) => {
         if (a.isDefault) return -1;
         if (b.isDefault) return 1;
         return a.label.localeCompare(b.label);
       });
+
+      // Pre-convert the default (English) subtitle to a WebVTT blob in background for instant display
+      const defaultSub = subtitles.find((s) => s.isDefault) || subtitles[0];
+      if (defaultSub && defaultSub.downloadUrl) {
+        convertSrtToVttBlob(defaultSub.downloadUrl).then((blobUrl) => {
+          defaultSub.url = blobUrl;
+        }).catch(() => {});
+      }
 
       return subtitles;
     } catch (err) {
@@ -78,4 +175,3 @@ export const subtitleService = {
     }
   },
 };
-

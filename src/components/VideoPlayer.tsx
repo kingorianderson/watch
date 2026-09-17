@@ -344,6 +344,10 @@ export default function VideoPlayer({
               qualities={directStreamData.qualities}
               subtitles={directStreamData.subtitles}
               title={title}
+              mediaType={type}
+              season={season}
+              episode={episode}
+              releaseYear={releaseYear}
               startAt={activeStartAt}
               onProgressUpdate={handleNativeProgress}
               onEnded={handleNativeEnded}
