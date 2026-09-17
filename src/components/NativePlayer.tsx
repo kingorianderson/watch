@@ -20,9 +20,15 @@ import {
   Sliders,
   Wifi,
   Sparkles,
+  Type,
 } from 'lucide-react';
 import type { StreamQuality, SubtitleTrack } from '../services/directStreamService';
-import { subtitleService, convertSrtToVttBlob } from '../services/subtitleService';
+import {
+  subtitleService,
+  convertSrtToVttBlob,
+  fetchSubtitleCues,
+  type SubtitleCue,
+} from '../services/subtitleService';
 
 interface NativePlayerProps {
   qualities: StreamQuality[];
@@ -39,6 +45,13 @@ interface NativePlayerProps {
 }
 
 const PREFERRED_QUALITY_KEY = 'watchd_preferred_quality';
+const SUB_SIZE_KEY = 'watchd_sub_size';
+const SUB_COLOR_KEY = 'watchd_sub_color';
+const SUB_BG_KEY = 'watchd_sub_bg';
+
+export type SubtitleSize = 'small' | 'medium' | 'large' | 'huge';
+export type SubtitleColor = 'white' | 'yellow' | 'cyan' | 'green';
+export type SubtitleBg = 'shadow' | 'semi' | 'solid';
 
 function formatTime(seconds: number): string {
   if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
@@ -110,6 +123,46 @@ function getFormattedQualityInfo(q: StreamQuality) {
   return { cleanLabel, badge, short, resolution: res };
 }
 
+function getSubSizeClasses(size: SubtitleSize) {
+  switch (size) {
+    case 'small':
+      return 'text-sm sm:text-base font-semibold';
+    case 'medium':
+      return 'text-base sm:text-xl font-bold';
+    case 'huge':
+      return 'text-2xl sm:text-4xl font-black';
+    case 'large':
+    default:
+      return 'text-xl sm:text-3xl font-extrabold';
+  }
+}
+
+function getSubColorClasses(color: SubtitleColor) {
+  switch (color) {
+    case 'yellow':
+      return 'text-yellow-300';
+    case 'cyan':
+      return 'text-cyan-300';
+    case 'green':
+      return 'text-emerald-300';
+    case 'white':
+    default:
+      return 'text-white';
+  }
+}
+
+function getSubBgClasses(bg: SubtitleBg) {
+  switch (bg) {
+    case 'semi':
+      return 'bg-black/75 backdrop-blur-xs px-3.5 py-1 rounded-xl shadow-lg';
+    case 'solid':
+      return 'bg-black px-4 py-1.5 rounded-xl shadow-2xl';
+    case 'shadow':
+    default:
+      return 'bg-transparent px-1.5 py-0.5';
+  }
+}
+
 export default function NativePlayer({
   qualities,
   subtitles = [],
@@ -175,6 +228,30 @@ export default function NativePlayer({
   const [hasError, setHasError] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
+  // Subtitle Customization State (Loaded from localStorage)
+  const [subSize, setSubSize] = useState<SubtitleSize>(() => {
+    return (localStorage.getItem(SUB_SIZE_KEY) as SubtitleSize) || 'large';
+  });
+  const [subColor, setSubColor] = useState<SubtitleColor>(() => {
+    return (localStorage.getItem(SUB_COLOR_KEY) as SubtitleColor) || 'white';
+  });
+  const [subBg, setSubBg] = useState<SubtitleBg>(() => {
+    return (localStorage.getItem(SUB_BG_KEY) as SubtitleBg) || 'shadow';
+  });
+
+  const handleSubSizeChange = (s: SubtitleSize) => {
+    setSubSize(s);
+    localStorage.setItem(SUB_SIZE_KEY, s);
+  };
+  const handleSubColorChange = (c: SubtitleColor) => {
+    setSubColor(c);
+    localStorage.setItem(SUB_COLOR_KEY, c);
+  };
+  const handleSubBgChange = (b: SubtitleBg) => {
+    setSubBg(b);
+    localStorage.setItem(SUB_BG_KEY, b);
+  };
+
   // Smart Auto Mode State (YouTube-style auto quality adaptation)
   const [isAutoQuality, setIsAutoQuality] = useState<boolean>(() => {
     const saved = localStorage.getItem(PREFERRED_QUALITY_KEY);
@@ -204,6 +281,7 @@ export default function NativePlayer({
   const [loadedSubtitles, setLoadedSubtitles] = useState<SubtitleTrack[]>(subtitles || []);
   const [isFetchingSubtitles, setIsFetchingSubtitles] = useState<boolean>(false);
   const [selectedSubtitle, setSelectedSubtitle] = useState<string>('off');
+  const [parsedCues, setParsedCues] = useState<SubtitleCue[]>([]);
 
   // Sync loadedSubtitles if parent passes new subtitles
   useEffect(() => {
@@ -243,6 +321,31 @@ export default function NativePlayer({
     };
   }, [title, mediaType, season, episode, releaseYear, loadedSubtitles.length]);
 
+  // Fetch structured cues whenever selected subtitle changes
+  useEffect(() => {
+    if (selectedSubtitle === 'off') {
+      setParsedCues([]);
+      return;
+    }
+
+    const track = loadedSubtitles.find((s) => s.language === selectedSubtitle);
+    if (track) {
+      fetchSubtitleCues(track.downloadUrl || track.url)
+        .then((cues) => {
+          setParsedCues(cues);
+        })
+        .catch((err) => {
+          console.warn('Error fetching subtitle cues:', err);
+        });
+    }
+  }, [selectedSubtitle, loadedSubtitles]);
+
+  // Derive current active subtitle cue for real-time overlay
+  const activeCue = useMemo(() => {
+    if (!parsedCues.length || selectedSubtitle === 'off') return null;
+    return parsedCues.find((c) => currentTime >= c.start && currentTime <= c.end) || null;
+  }, [parsedCues, currentTime, selectedSubtitle]);
+
   // Keep selectedQuality synchronized if sortedQualities updates
   useEffect(() => {
     if (sortedQualities.length === 0) return;
@@ -264,8 +367,10 @@ export default function NativePlayer({
     }
   }, [sortedQualities, selectedQuality?.url]);
 
-  // YouTube-style Settings Navigation: 'closed' | 'main' | 'quality' | 'speed' | 'subtitles'
-  const [menuView, setMenuView] = useState<'closed' | 'main' | 'quality' | 'speed' | 'subtitles'>('closed');
+  // Settings Menu Navigation
+  const [menuView, setMenuView] = useState<
+    'closed' | 'main' | 'quality' | 'speed' | 'subtitles' | 'sub_style'
+  >('closed');
 
   // Hover Scrubber Preview Time
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -290,7 +395,6 @@ export default function NativePlayer({
 
   // Playback Refs for stable state tracking
   const savedPlaybackTimeRef = useRef<number>(startAt);
-  const shouldResumePlayRef = useRef<boolean>(true);
   const hideControlsTimerRef = useRef<number | null>(null);
   const lastTouchTimeRef = useRef<number>(0);
   const stallCountRef = useRef<number>(0);
@@ -311,10 +415,6 @@ export default function NativePlayer({
   sortedQualitiesRef.current = sortedQualities;
   const isAutoQualityRef = useRef(isAutoQuality);
   isAutoQualityRef.current = isAutoQuality;
-  const currentTimeRef = useRef(currentTime);
-  currentTimeRef.current = currentTime;
-  const isPlayingRef = useRef(isPlaying);
-  isPlayingRef.current = isPlaying;
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
   const isMutedRef = useRef(isMuted);
@@ -353,9 +453,8 @@ export default function NativePlayer({
     const currentQ = selectedQualityRef.current;
     if (!currentQ) return;
     const currentRes = getResolutionNumber(currentQ);
-    if (currentRes >= 1080) return; // Already at 1080p or 4K
+    if (currentRes >= 1080) return;
 
-    // Find 1080p or higher
     const higherQualities = sortedQualitiesRef.current.filter(
       (q) => (q.resolution || 0) > currentRes && (q.resolution || 0) <= 1080
     );
@@ -489,7 +588,6 @@ export default function NativePlayer({
     }
 
     // 2. Seamless Hot Quality Switch Path (Gapless Dual-Buffer Transition)
-    // The active video keeps playing uninterrupted while the background video buffers the new quality!
     isSwitchingRef.current = true;
     setIsQualitySwitching(true);
 
@@ -512,7 +610,6 @@ export default function NativePlayer({
       );
 
       if (levelIdx !== -1) {
-        // Native 0ms HLS level switch within the same element
         activeHls.currentLevel = levelIdx;
         currentStreamUrlRef.current = streamUrl;
         isSwitchingRef.current = false;
@@ -523,10 +620,9 @@ export default function NativePlayer({
     }
 
     // Prepare Inactive Video in background
-    inactiveVid.muted = true; // Mute strictly during background loading to prevent audio doubling
+    inactiveVid.muted = true;
     inactiveVid.playbackRate = activeVid.playbackRate || 1;
 
-    // Clean up previous HLS instance on inactive slot if any
     if (inactiveSlot === 'B' && hlsRefB.current) {
       hlsRefB.current.destroy();
       hlsRefB.current = null;
@@ -537,26 +633,21 @@ export default function NativePlayer({
 
     let isSwapped = false;
 
-    // Atomic Seamless Swap Trigger
     const executeSeamlessSwap = () => {
       if (isSwapped) return;
       isSwapped = true;
 
-      // Resync timestamp to ensure frame-perfect continuity
       const liveCurrentTime = activeVid.currentTime;
       if (liveCurrentTime > 0 && Math.abs(inactiveVid.currentTime - liveCurrentTime) > 0.25) {
         inactiveVid.currentTime = liveCurrentTime;
       }
 
-      // Transfer audio smoothly
       inactiveVid.muted = isMutedRef.current;
       inactiveVid.volume = volumeRef.current;
 
-      // Silence & pause previous active video
       activeVid.muted = true;
       activeVid.pause();
 
-      // Clean up previous HLS / stream
       if (activeSlotCurrent === 'A' && hlsRefA.current) {
         hlsRefA.current.destroy();
         hlsRefA.current = null;
@@ -568,7 +659,6 @@ export default function NativePlayer({
       activeVid.removeAttribute('src');
       activeVid.load();
 
-      // Toggle active slot with smooth 300ms CSS crossfade
       setActiveSlot(inactiveSlot);
       activeSlotRef.current = inactiveSlot;
       currentStreamUrlRef.current = streamUrl;
@@ -612,7 +702,6 @@ export default function NativePlayer({
         }
       });
     } else {
-      // Direct MP4 / VIP Stream
       inactiveVid.src = streamUrl;
       inactiveVid.load();
 
@@ -651,14 +740,12 @@ export default function NativePlayer({
     };
   }, []);
 
-  // Handle Manual Quality Selection (Persistent memory saved in localStorage)
+  // Handle Manual Quality Selection
   const handleQualityChange = (newQuality: StreamQuality, isAuto: boolean = false) => {
     const video = getActiveVideo();
     const currentPos = video ? video.currentTime : currentTime;
-    const wasPlaying = video ? !video.paused : isPlaying;
 
     savedPlaybackTimeRef.current = currentPos;
-    shouldResumePlayRef.current = wasPlaying;
     stallCountRef.current = 0;
     smoothPlaybackSecondsRef.current = 0;
 
@@ -678,9 +765,8 @@ export default function NativePlayer({
     setMenuView('closed');
   };
 
-  // Monitor playback buffering/stalls to trigger smart YouTube auto-downgrade
+  // Monitor playback buffering/stalls
   const handleWaiting = () => {
-    // If switching qualities in background, do not flash spinner
     if (isSwitchingRef.current) return;
 
     if (waitingDebounceTimerRef.current) clearTimeout(waitingDebounceTimerRef.current);
@@ -691,7 +777,6 @@ export default function NativePlayer({
       }
     }, 450);
 
-    // If stall lasts longer than 3.5 seconds on high quality (4K / 1080p), adaptively step down
     if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
     stallTimerRef.current = window.setTimeout(() => {
       const activeVid = getActiveVideo();
@@ -731,7 +816,6 @@ export default function NativePlayer({
           const bEnd = video.buffered.end(i);
           setBufferedEnd(bEnd);
 
-          // Smart Auto Step-up check (if healthy buffer > 18s and smooth playback for 45s)
           if (isAutoQualityRef.current && bEnd - current > 18 && !video.paused) {
             smoothPlaybackSecondsRef.current += 0.25;
             if (smoothPlaybackSecondsRef.current >= 45) {
@@ -1040,31 +1124,19 @@ export default function NativePlayer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handlePlayPause, duration, getActiveVideo]);
 
-  // Synchronize Subtitle TextTracks across both video elements
+  // Disable native video text tracks so custom high-fidelity React overlay renders exclusively
   useEffect(() => {
-    const syncTracksForVideo = (vid: HTMLVideoElement | null) => {
+    const disableNativeTracks = (vid: HTMLVideoElement | null) => {
       if (!vid || !vid.textTracks) return;
       for (let i = 0; i < vid.textTracks.length; i++) {
-        const track = vid.textTracks[i];
-        if (selectedSubtitle === 'off') {
-          track.mode = 'disabled';
-        } else if (
-          track.language === selectedSubtitle ||
-          track.label.toLowerCase() === selectedSubtitle.toLowerCase() ||
-          (selectedSubtitle.startsWith('en') && track.language.startsWith('en'))
-        ) {
-          track.mode = 'showing';
-        } else {
-          track.mode = 'disabled';
-        }
+        vid.textTracks[i].mode = 'disabled';
       }
     };
+    disableNativeTracks(videoRefA.current);
+    disableNativeTracks(videoRefB.current);
+  }, [selectedSubtitle, activeSlot]);
 
-    syncTracksForVideo(videoRefA.current);
-    syncTracksForVideo(videoRefB.current);
-  }, [selectedSubtitle, loadedSubtitles, activeSlot]);
-
-  // Active Quality Badge Display in Bottom Bar (e.g. "Auto (1080p)", "4K", "1080p")
+  // Active Quality Badge Display in Bottom Bar
   const currentBadgeText = isAutoQuality
     ? `Auto (${selectedQuality.shortLabel || '1080p'})`
     : selectedQuality.shortLabel || '1080p';
@@ -1079,8 +1151,6 @@ export default function NativePlayer({
       onMouseLeave={() => isPlaying && setShowControls(false)}
       className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl group select-none flex items-center justify-center font-sans"
     >
-      {/* Dual Video Elements with Seamless 300ms Crossfade Transition */}
-
       {/* Video Slot A */}
       <video
         ref={videoRefA}
@@ -1108,18 +1178,7 @@ export default function NativePlayer({
         className={`absolute inset-0 w-full h-full object-contain cursor-pointer transition-opacity duration-300 ${
           activeSlot === 'A' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
         }`}
-      >
-        {loadedSubtitles.map((sub) => (
-          <track
-            key={`A-${sub.language}-${sub.url}`}
-            kind="subtitles"
-            src={sub.url}
-            srcLang={sub.language}
-            label={sub.label}
-            default={selectedSubtitle === sub.language}
-          />
-        ))}
-      </video>
+      />
 
       {/* Video Slot B */}
       <video
@@ -1148,20 +1207,37 @@ export default function NativePlayer({
         className={`absolute inset-0 w-full h-full object-contain cursor-pointer transition-opacity duration-300 ${
           activeSlot === 'B' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
         }`}
-      >
-        {loadedSubtitles.map((sub) => (
-          <track
-            key={`B-${sub.language}-${sub.url}`}
-            kind="subtitles"
-            src={sub.url}
-            srcLang={sub.language}
-            label={sub.label}
-            default={selectedSubtitle === sub.language}
-          />
-        ))}
-      </video>
+      />
 
-      {/* Smart Network / Quality Toast Notification (Non-intrusive Top Banner) */}
+      {/* Custom High-Fidelity Subtitle Overlay (Dynamic elevation above controls) */}
+      {activeCue && selectedSubtitle !== 'off' && (
+        <div
+          className={`absolute inset-x-0 pointer-events-none flex justify-center z-25 px-4 transition-all duration-300 ${
+            showControls || !isPlaying ? 'bottom-24 sm:bottom-28' : 'bottom-8 sm:bottom-12'
+          }`}
+        >
+          <div className="flex flex-col items-center justify-center space-y-1 text-center max-w-4xl">
+            {activeCue.lines.map((line, idx) => (
+              <span
+                key={idx}
+                className={`inline-block font-sans select-none tracking-normal leading-snug transition-all duration-150 ${getSubSizeClasses(
+                  subSize
+                )} ${getSubColorClasses(subColor)} ${getSubBgClasses(subBg)}`}
+                style={{
+                  textShadow:
+                    subBg === 'shadow'
+                      ? '0 2px 4px rgba(0,0,0,0.98), 0 0 3px #000, 0 0 6px #000, 0 0 10px rgba(0,0,0,0.9)'
+                      : '0 1px 2px rgba(0,0,0,0.8)',
+                }}
+              >
+                {line}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Smart Network / Quality Toast Notification */}
       {networkToast && (
         <div className="absolute top-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900/95 text-white text-xs font-semibold shadow-2xl border border-zinc-700/80 backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-200">
           {networkToast.isQuality ? (
@@ -1197,7 +1273,7 @@ export default function NativePlayer({
         </div>
       )}
 
-      {/* Cold-Start Initial Loading Spinner Only (Never during smooth quality switch) */}
+      {/* Cold-Start Initial Loading Spinner Only */}
       {isLoading && !hasError && !isQualitySwitching && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none z-20">
           <div className="w-14 h-14 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin shadow-xl" />
@@ -1278,7 +1354,6 @@ export default function NativePlayer({
 
           {/* Background Gray Track */}
           <div className="absolute inset-0 bg-white/20 rounded-full overflow-hidden">
-            {/* Buffered Download Progress */}
             <div
               className="h-full bg-white/40 transition-all duration-150"
               style={{ width: `${bufferedPercent}%` }}
@@ -1371,7 +1446,7 @@ export default function NativePlayer({
 
           {/* Right Controls (Quality Badge, Subtitles, Settings, Fullscreen) */}
           <div className="flex items-center gap-2 relative">
-            {/* YouTube Quality Badge Button */}
+            {/* Quality Badge Button */}
             <button
               onClick={() => setMenuView(menuView === 'quality' ? 'closed' : 'quality')}
               className="px-2 py-1 rounded-md bg-zinc-800/90 hover:bg-zinc-700 text-white font-mono text-[11px] font-bold border border-white/10 hover:border-red-500/40 transition cursor-pointer flex items-center gap-1 shadow-sm"
@@ -1384,7 +1459,7 @@ export default function NativePlayer({
               )}
             </button>
 
-            {/* Subtitles / CC Button (Always Visible on Control Bar like YouTube) */}
+            {/* Subtitles / CC Button */}
             <button
               onClick={toggleCaptionsQuick}
               className={`p-1.5 rounded-lg transition cursor-pointer flex items-center justify-center ${
@@ -1423,9 +1498,9 @@ export default function NativePlayer({
               {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
             </button>
 
-            {/* YouTube-Style Popover Menu */}
+            {/* Settings Popover Menu */}
             {menuView !== 'closed' && (
-              <div className="absolute right-0 bottom-12 z-50 w-64 bg-zinc-950/95 border border-zinc-800 rounded-2xl shadow-2xl p-2 text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 space-y-1">
+              <div className="absolute right-0 bottom-12 z-50 w-72 bg-zinc-950/95 border border-zinc-800 rounded-2xl shadow-2xl p-2 text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 space-y-1">
                 {/* 1. Main Settings Menu */}
                 {menuView === 'main' && (
                   <>
@@ -1462,24 +1537,39 @@ export default function NativePlayer({
                       </div>
                     </button>
 
-                    {/* Subtitles Row (Always Available) */}
+                    {/* Subtitles Row */}
                     <button
                       onClick={() => setMenuView('subtitles')}
                       className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5">
                         <Subtitles className="w-4 h-4 text-red-500" />
-                        <span className="font-medium">Subtitles</span>
+                        <span className="font-medium">Subtitles Track</span>
                       </div>
                       <div className="flex items-center gap-1 text-zinc-400 text-[11px]">
-                        <span className="capitalize">{selectedSubtitle}</span>
+                        <span className="capitalize font-medium text-white">{selectedSubtitle}</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </div>
+                    </button>
+
+                    {/* Subtitle Style & Size Row */}
+                    <button
+                      onClick={() => setMenuView('sub_style')}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Type className="w-4 h-4 text-amber-400" />
+                        <span className="font-medium">Subtitle Size & Style</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-zinc-400 text-[11px]">
+                        <span className="capitalize text-zinc-300 font-medium">{subSize}</span>
                         <ChevronRight className="w-3.5 h-3.5" />
                       </div>
                     </button>
                   </>
                 )}
 
-                {/* 2. Quality Selection Sub-Menu (YouTube Style with Smart Auto option) */}
+                {/* 2. Quality Selection Sub-Menu */}
                 {menuView === 'quality' && (
                   <>
                     <button
@@ -1487,11 +1577,10 @@ export default function NativePlayer({
                       className="w-full flex items-center gap-2 px-2 py-1.5 text-zinc-400 hover:text-white text-left font-bold text-xs border-b border-zinc-800 mb-1 transition cursor-pointer"
                     >
                       <ChevronLeft className="w-4 h-4" />
-                      <span>Quality for current video</span>
+                      <span>Quality</span>
                     </button>
 
                     <div className="max-h-64 overflow-y-auto space-y-0.5 pr-1">
-                      {/* 1. YouTube-style Smart Auto option */}
                       <button
                         onClick={() => handleQualityChange(selectedQuality, true)}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-left cursor-pointer ${
@@ -1509,7 +1598,6 @@ export default function NativePlayer({
                         {isAutoQuality && <Check className="w-4 h-4 shrink-0" />}
                       </button>
 
-                      {/* 2. Distinct Sorted Resolutions */}
                       {sortedQualities.map((q) => {
                         const isSelected = !isAutoQuality && selectedQuality.url === q.url;
                         const res = q.resolution || 1080;
@@ -1586,16 +1674,25 @@ export default function NativePlayer({
                   </>
                 )}
 
-                {/* 4. Subtitles Sub-Menu */}
+                {/* 4. Subtitles Track Sub-Menu */}
                 {menuView === 'subtitles' && (
                   <>
-                    <button
-                      onClick={() => setMenuView('main')}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 text-zinc-400 hover:text-white text-left font-bold text-xs border-b border-zinc-800 mb-1 transition cursor-pointer"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                      <span>Subtitles / Captions</span>
-                    </button>
+                    <div className="flex items-center justify-between border-b border-zinc-800 mb-1 px-1 py-1">
+                      <button
+                        onClick={() => setMenuView('main')}
+                        className="flex items-center gap-1.5 text-zinc-400 hover:text-white font-bold text-xs transition cursor-pointer"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        <span>Subtitles Track</span>
+                      </button>
+                      <button
+                        onClick={() => setMenuView('sub_style')}
+                        className="px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 hover:text-amber-300 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                      >
+                        <Type className="w-3 h-3" />
+                        <span>Style & Size</span>
+                      </button>
+                    </div>
 
                     <div className="max-h-60 overflow-y-auto space-y-0.5 pr-1">
                       <button
@@ -1635,6 +1732,121 @@ export default function NativePlayer({
                       )}
                     </div>
                   </>
+                )}
+
+                {/* 5. Subtitle Style & Size Sub-Menu */}
+                {menuView === 'sub_style' && (
+                  <div className="space-y-2.5 p-1">
+                    <button
+                      onClick={() => setMenuView('main')}
+                      className="w-full flex items-center gap-2 px-1 py-1 text-zinc-400 hover:text-white text-left font-bold text-xs border-b border-zinc-800 mb-2 transition cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>Subtitle Style & Size</span>
+                    </button>
+
+                    {/* Live Preview Box */}
+                    <div className="p-3 rounded-xl bg-zinc-900/90 border border-zinc-800 flex flex-col items-center justify-center min-h-[68px] text-center overflow-hidden">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono mb-1">
+                        Live Preview
+                      </span>
+                      <div
+                        className={`font-sans tracking-normal leading-snug ${getSubSizeClasses(
+                          subSize
+                        )} ${getSubColorClasses(subColor)} ${getSubBgClasses(subBg)}`}
+                        style={{
+                          textShadow:
+                            subBg === 'shadow'
+                              ? '0 2px 4px rgba(0,0,0,0.98), 0 0 3px #000, 0 0 6px #000'
+                              : undefined,
+                        }}
+                      >
+                        -Not necessary.
+                        <br />
+                        -Well, I owe you.
+                      </div>
+                    </div>
+
+                    {/* 1. Font Size Selector */}
+                    <div>
+                      <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1 block">
+                        Font Size
+                      </label>
+                      <div className="grid grid-cols-4 gap-1">
+                        {[
+                          { id: 'small', label: '75%' },
+                          { id: 'medium', label: '100%' },
+                          { id: 'large', label: '125%' },
+                          { id: 'huge', label: '150%' },
+                        ].map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => handleSubSizeChange(item.id as SubtitleSize)}
+                            className={`py-1.5 px-1 rounded-lg text-center font-bold text-[11px] transition cursor-pointer ${
+                              subSize === item.id
+                                ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
+                                : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 2. Font Color Selector */}
+                    <div>
+                      <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1 block">
+                        Text Color
+                      </label>
+                      <div className="grid grid-cols-4 gap-1">
+                        {[
+                          { id: 'white', label: 'White', colorClass: 'text-white' },
+                          { id: 'yellow', label: 'Yellow', colorClass: 'text-yellow-300' },
+                          { id: 'cyan', label: 'Cyan', colorClass: 'text-cyan-300' },
+                          { id: 'green', label: 'Green', colorClass: 'text-emerald-300' },
+                        ].map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => handleSubColorChange(item.id as SubtitleColor)}
+                            className={`py-1.5 px-1 rounded-lg text-center font-bold text-[11px] flex items-center justify-center gap-1 transition cursor-pointer ${
+                              subColor === item.id
+                                ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
+                                : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            <span className={item.colorClass}>{item.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 3. Background Style Selector */}
+                    <div>
+                      <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1 block">
+                        Background
+                      </label>
+                      <div className="grid grid-cols-3 gap-1">
+                        {[
+                          { id: 'shadow', label: 'Outline' },
+                          { id: 'semi', label: 'Semi-Box' },
+                          { id: 'solid', label: 'Solid Box' },
+                        ].map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => handleSubBgChange(item.id as SubtitleBg)}
+                            className={`py-1.5 px-1 rounded-lg text-center font-bold text-[11px] transition cursor-pointer ${
+                              subBg === item.id
+                                ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
+                                : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
