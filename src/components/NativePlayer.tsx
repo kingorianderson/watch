@@ -177,6 +177,27 @@ export default function NativePlayer({
 
   const [selectedSubtitle, setSelectedSubtitle] = useState<string>('off');
 
+  // Keep selectedQuality synchronized if sortedQualities updates (e.g. new episode / movie)
+  useEffect(() => {
+    if (sortedQualities.length === 0) return;
+    const exists = sortedQualities.some((q) => q.url === selectedQuality?.url);
+    if (!exists) {
+      const savedPref = localStorage.getItem(PREFERRED_QUALITY_KEY);
+      if (savedPref && savedPref !== 'auto') {
+        const matched = sortedQualities.find((q) => {
+          const s = (q.shortLabel || q.label || '').toLowerCase();
+          return s.includes(savedPref.toLowerCase());
+        });
+        if (matched) {
+          setSelectedQuality(matched);
+          return;
+        }
+      }
+      const p1080 = sortedQualities.find((q) => (q.resolution || 0) === 1080);
+      setSelectedQuality(p1080 || sortedQualities.find((q) => q.isDefault) || sortedQualities[0]);
+    }
+  }, [sortedQualities, selectedQuality?.url]);
+
   // YouTube-style Settings Navigation: 'closed' | 'main' | 'quality' | 'speed' | 'subtitles'
   const [menuView, setMenuView] = useState<'closed' | 'main' | 'quality' | 'speed' | 'subtitles'>('closed');
 
@@ -192,13 +213,33 @@ export default function NativePlayer({
   const [networkToast, setNetworkToast] = useState<string | null>(null);
   const networkToastTimerRef = useRef<number | null>(null);
 
-  // Seamless Quality Switching Trackers
+  // Seamless Quality Switching Trackers & Mutable Refs
   const savedPlaybackTimeRef = useRef<number>(startAt);
   const shouldResumePlayRef = useRef<boolean>(true);
   const hideControlsTimerRef = useRef<number | null>(null);
   const lastTouchTimeRef = useRef<number>(0);
   const stallCountRef = useRef<number>(0);
   const stallTimerRef = useRef<number | null>(null);
+  const waitingDebounceTimerRef = useRef<number | null>(null);
+
+  // Keep fresh mutable refs for callbacks to avoid re-triggering effects
+  const onProgressUpdateRef = useRef(onProgressUpdate);
+  onProgressUpdateRef.current = onProgressUpdate;
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
+  const onSwitchToBackupRef = useRef(onSwitchToBackup);
+  onSwitchToBackupRef.current = onSwitchToBackup;
+
+  const selectedQualityRef = useRef(selectedQuality);
+  selectedQualityRef.current = selectedQuality;
+  const sortedQualitiesRef = useRef(sortedQualities);
+  sortedQualitiesRef.current = sortedQualities;
+  const isAutoQualityRef = useRef(isAutoQuality);
+  isAutoQualityRef.current = isAutoQuality;
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
 
   const showNetworkToast = (message: string) => {
     setNetworkToast(message);
@@ -208,19 +249,21 @@ export default function NativePlayer({
     }, 3800);
   };
 
-  // Step down quality gracefully when internet connection is slow or buffering stalls
+  // Step down quality gracefully when internet connection is slow or buffering stalls (STABLE callback)
   const stepDownQuality = useCallback(
     (reason: string = 'slow connection') => {
-      const currentRes = getResolutionNumber(selectedQuality);
+      const currentQ = selectedQualityRef.current;
+      if (!currentQ) return;
+      const currentRes = getResolutionNumber(currentQ);
       // Find lower qualities available
-      const lowerQualities = sortedQualities.filter((q) => (q.resolution || 0) < currentRes);
+      const lowerQualities = sortedQualitiesRef.current.filter((q) => (q.resolution || 0) < currentRes);
 
       if (lowerQualities.length > 0) {
         // Pick the closest lower quality (e.g. 4K -> 1080p, 1080p -> 720p, 720p -> 480p)
         const nextLower = lowerQualities[0];
         const video = videoRef.current;
-        const currentPos = video ? video.currentTime : currentTime;
-        const wasPlaying = video ? !video.paused : isPlaying;
+        const currentPos = video ? video.currentTime : savedPlaybackTimeRef.current;
+        const wasPlaying = video ? !video.paused : isPlayingRef.current;
 
         savedPlaybackTimeRef.current = currentPos;
         shouldResumePlayRef.current = wasPlaying;
@@ -229,7 +272,7 @@ export default function NativePlayer({
         showNetworkToast(`⚡ Switched to ${nextLower.shortLabel || 'lower resolution'} due to ${reason}`);
       }
     },
-    [selectedQuality, sortedQualities, currentTime, isPlaying]
+    []
   );
 
   // Initialize or Switch Video Stream (Seamless position restoration like YouTube)
@@ -246,9 +289,9 @@ export default function NativePlayer({
 
     let retryCount = 0;
     let loadTimeout: number | null = window.setTimeout(() => {
-      if (isLoading && video.readyState < 2) {
+      if (video.readyState < 2) {
         // If high quality timed out loading, try step down before showing full error
-        const currentRes = getResolutionNumber(selectedQuality);
+        const currentRes = getResolutionNumber(selectedQualityRef.current);
         if (currentRes > 720) {
           stepDownQuality('network timeout');
         } else {
@@ -302,7 +345,7 @@ export default function NativePlayer({
                 // Network error: step down quality if possible
                 if (loadTimeout) clearTimeout(loadTimeout);
                 hls.destroy();
-                const currentRes = getResolutionNumber(selectedQuality);
+                const currentRes = getResolutionNumber(selectedQualityRef.current);
                 if (currentRes > 720) {
                   stepDownQuality('network instability');
                 } else {
@@ -352,7 +395,7 @@ export default function NativePlayer({
       const onError = () => {
         if (loadTimeout) clearTimeout(loadTimeout);
         // If error on 4K/VIP, try step down before failing
-        const currentRes = getResolutionNumber(selectedQuality);
+        const currentRes = getResolutionNumber(selectedQualityRef.current);
         if (currentRes > 720) {
           stepDownQuality('stream error');
         } else {
@@ -369,12 +412,13 @@ export default function NativePlayer({
     return () => {
       if (loadTimeout) clearTimeout(loadTimeout);
       if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
+      if (waitingDebounceTimerRef.current) clearTimeout(waitingDebounceTimerRef.current);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
     };
-  }, [selectedQuality, stepDownQuality]);
+  }, [selectedQuality?.url, stepDownQuality]);
 
   // Handle Manual Quality Selection (Persistent memory saved in localStorage)
   const handleQualityChange = (newQuality: StreamQuality, isAuto: boolean = false) => {
@@ -405,15 +449,21 @@ export default function NativePlayer({
 
   // Monitor playback buffering/stalls to trigger smart YouTube auto-downgrade
   const handleWaiting = () => {
-    setIsLoading(true);
+    // Debounce setting isLoading so transient sub-second buffering does not flash the spinner
+    if (waitingDebounceTimerRef.current) clearTimeout(waitingDebounceTimerRef.current);
+    waitingDebounceTimerRef.current = window.setTimeout(() => {
+      if (videoRef.current && videoRef.current.readyState < 3) {
+        setIsLoading(true);
+      }
+    }, 300);
 
     // If stall lasts longer than 4.5 seconds on high quality (4K / 1080p), adaptively step down
     if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
     stallTimerRef.current = window.setTimeout(() => {
       if (videoRef.current && videoRef.current.readyState < 3) {
         stallCountRef.current += 1;
-        const currentRes = getResolutionNumber(selectedQuality);
-        if (currentRes > 480 && (isAutoQuality || stallCountRef.current >= 2)) {
+        const currentRes = getResolutionNumber(selectedQualityRef.current);
+        if (currentRes > 480 && (isAutoQualityRef.current || stallCountRef.current >= 2)) {
           stepDownQuality('buffering delay');
         }
       }
@@ -428,8 +478,17 @@ export default function NativePlayer({
     const current = video.currentTime;
     const dur = video.duration || 0;
     setCurrentTime(current);
-    setDuration(dur);
+    if (dur && dur > 0) setDuration(dur);
     savedPlaybackTimeRef.current = current;
+
+    // Clear any pending waiting debounce timer and spinner if video is playing smoothly
+    if (waitingDebounceTimerRef.current) {
+      clearTimeout(waitingDebounceTimerRef.current);
+      waitingDebounceTimerRef.current = null;
+    }
+    if (isLoading && video.readyState >= 3) {
+      setIsLoading(false);
+    }
 
     // Update buffer
     if (video.buffered.length > 0) {
@@ -441,7 +500,7 @@ export default function NativePlayer({
       }
     }
 
-    onProgressUpdate?.(current, dur);
+    onProgressUpdateRef.current?.(current, dur);
   };
 
   const handlePlayPause = useCallback(() => {
@@ -726,12 +785,16 @@ export default function NativePlayer({
         onTimeUpdate={handleTimeUpdate}
         onWaiting={handleWaiting}
         onPlaying={() => {
+          if (waitingDebounceTimerRef.current) {
+            clearTimeout(waitingDebounceTimerRef.current);
+            waitingDebounceTimerRef.current = null;
+          }
           setIsLoading(false);
           setIsPlaying(true);
           if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
         }}
         onPause={() => setIsPlaying(false)}
-        onEnded={onEnded}
+        onEnded={() => onEndedRef.current?.()}
         onClick={handleVideoClick}
         onDoubleClick={toggleFullscreen}
         className="w-full h-full object-contain cursor-pointer"
@@ -795,7 +858,7 @@ export default function NativePlayer({
           <div className="flex items-center gap-3 pt-2">
             {onSwitchToBackup && (
               <button
-                onClick={onSwitchToBackup}
+                onClick={() => onSwitchToBackupRef.current?.()}
                 className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-600/30 transition cursor-pointer"
               >
                 Switch to Server 2 (VidLink)
