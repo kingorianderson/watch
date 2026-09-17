@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Hls from 'hls.js';
 import {
   Play,
@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   Gauge,
   Sliders,
+  Wifi,
 } from 'lucide-react';
 import type { StreamQuality, SubtitleTrack } from '../services/directStreamService';
 
@@ -31,6 +32,8 @@ interface NativePlayerProps {
   onSwitchToBackup?: () => void;
 }
 
+const PREFERRED_QUALITY_KEY = 'watchd_preferred_quality';
+
 function formatTime(seconds: number): string {
   if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
   const hrs = Math.floor(seconds / 3600);
@@ -41,6 +44,62 @@ function formatTime(seconds: number): string {
     return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
   }
   return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+}
+
+// Helper to extract numeric resolution from quality
+function getResolutionNumber(q: StreamQuality): number {
+  if (q.resolution && q.resolution > 0) return q.resolution;
+  const str = `${q.shortLabel || ''} ${q.label || ''}`.toLowerCase();
+  if (str.includes('4k') || str.includes('2160')) return 2160;
+  if (str.includes('1440') || str.includes('2k')) return 1440;
+  if (str.includes('1080')) return 1080;
+  if (str.includes('720')) return 720;
+  if (str.includes('480')) return 480;
+  if (str.includes('360')) return 360;
+  if (str.includes('org') || str.includes('vip')) return 2160;
+  return 1080;
+}
+
+// Helper to standardize quality label & badge type
+function getFormattedQualityInfo(q: StreamQuality) {
+  const res = getResolutionNumber(q);
+  const isVipOrg = (q.shortLabel || q.label || '').toLowerCase().includes('vip') || (q.shortLabel || q.label || '').toLowerCase().includes('org');
+
+  let cleanLabel = '1080p Full HD';
+  let badge: '4k' | 'hd' | 'sd' | 'vip' | null = null;
+  let short = '1080p';
+
+  if (isVipOrg) {
+    cleanLabel = 'Original VIP (Source Direct)';
+    badge = 'vip';
+    short = 'VIP Direct';
+  } else if (res >= 2160) {
+    cleanLabel = '4K Ultra HD (2160p)';
+    badge = '4k';
+    short = '4K';
+  } else if (res >= 1440) {
+    cleanLabel = '1440p (2K QHD)';
+    badge = 'hd';
+    short = '1440p';
+  } else if (res >= 1080) {
+    cleanLabel = '1080p Full HD';
+    badge = 'hd';
+    short = '1080p';
+  } else if (res >= 720) {
+    cleanLabel = '720p HD';
+    badge = 'hd';
+    short = '720p';
+  } else if (res >= 480) {
+    cleanLabel = '480p SD';
+    badge = 'sd';
+    short = '480p';
+  } else {
+    cleanLabel = '360p';
+    badge = 'sd';
+    short = '360p';
+  }
+
+  return { cleanLabel, badge, short, resolution: res };
 }
 
 export default function NativePlayer({
@@ -57,6 +116,26 @@ export default function NativePlayer({
   const progressBarRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
 
+  // Standardize & sort available qualities descending (4K -> 1080p -> 720p -> 480p -> 360p)
+  const sortedQualities = useMemo(() => {
+    if (!qualities || qualities.length === 0) return [];
+
+    const list = qualities.map((q) => {
+      const info = getFormattedQualityInfo(q);
+      return {
+        ...q,
+        label: q.label && q.label.includes('•') ? q.label : info.cleanLabel,
+        shortLabel: info.short,
+        resolution: info.resolution,
+        badgeType: info.badge,
+      };
+    });
+
+    // Sort strictly descending by resolution
+    list.sort((a, b) => (b.resolution || 0) - (a.resolution || 0));
+    return list;
+  }, [qualities]);
+
   // Core Playback State
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -70,10 +149,32 @@ export default function NativePlayer({
   const [hasError, setHasError] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
-  // Selected Quality & Subtitle
-  const [selectedQuality, setSelectedQuality] = useState<StreamQuality>(() => {
-    return qualities.find((q) => q.isDefault) || qualities[0];
+  // Smart Auto Mode State (YouTube-style auto quality adaptation)
+  const [isAutoQuality, setIsAutoQuality] = useState<boolean>(() => {
+    const saved = localStorage.getItem(PREFERRED_QUALITY_KEY);
+    return !saved || saved === 'auto';
   });
+
+  // Selected Quality initialization from persistent localStorage memory or default 1080p
+  const [selectedQuality, setSelectedQuality] = useState<StreamQuality>(() => {
+    const savedPref = localStorage.getItem(PREFERRED_QUALITY_KEY);
+
+    if (savedPref && savedPref !== 'auto' && sortedQualities.length > 0) {
+      const matched = sortedQualities.find((q) => {
+        const s = (q.shortLabel || q.label || '').toLowerCase();
+        return s.includes(savedPref.toLowerCase());
+      });
+      if (matched) return matched;
+    }
+
+    // Default to 1080p Full HD
+    const p1080 = sortedQualities.find((q) => (q.resolution || 0) === 1080);
+    if (p1080) return p1080;
+
+    // Next preference: 720p or 4K or default
+    return sortedQualities.find((q) => q.isDefault) || sortedQualities[0] || qualities[0];
+  });
+
   const [selectedSubtitle, setSelectedSubtitle] = useState<string>('off');
 
   // YouTube-style Settings Navigation: 'closed' | 'main' | 'quality' | 'speed' | 'subtitles'
@@ -87,11 +188,49 @@ export default function NativePlayer({
   const [skipIndicator, setSkipIndicator] = useState<{ text: string; side: 'left' | 'right' } | null>(null);
   const skipIndicatorTimerRef = useRef<number | null>(null);
 
+  // Smart Network Adaptation Toast Notification
+  const [networkToast, setNetworkToast] = useState<string | null>(null);
+  const networkToastTimerRef = useRef<number | null>(null);
+
   // Seamless Quality Switching Trackers
   const savedPlaybackTimeRef = useRef<number>(startAt);
   const shouldResumePlayRef = useRef<boolean>(true);
   const hideControlsTimerRef = useRef<number | null>(null);
   const lastTouchTimeRef = useRef<number>(0);
+  const stallCountRef = useRef<number>(0);
+  const stallTimerRef = useRef<number | null>(null);
+
+  const showNetworkToast = (message: string) => {
+    setNetworkToast(message);
+    if (networkToastTimerRef.current) clearTimeout(networkToastTimerRef.current);
+    networkToastTimerRef.current = window.setTimeout(() => {
+      setNetworkToast(null);
+    }, 3800);
+  };
+
+  // Step down quality gracefully when internet connection is slow or buffering stalls
+  const stepDownQuality = useCallback(
+    (reason: string = 'slow connection') => {
+      const currentRes = getResolutionNumber(selectedQuality);
+      // Find lower qualities available
+      const lowerQualities = sortedQualities.filter((q) => (q.resolution || 0) < currentRes);
+
+      if (lowerQualities.length > 0) {
+        // Pick the closest lower quality (e.g. 4K -> 1080p, 1080p -> 720p, 720p -> 480p)
+        const nextLower = lowerQualities[0];
+        const video = videoRef.current;
+        const currentPos = video ? video.currentTime : currentTime;
+        const wasPlaying = video ? !video.paused : isPlaying;
+
+        savedPlaybackTimeRef.current = currentPos;
+        shouldResumePlayRef.current = wasPlaying;
+
+        setSelectedQuality(nextLower);
+        showNetworkToast(`⚡ Switched to ${nextLower.shortLabel || 'lower resolution'} due to ${reason}`);
+      }
+    },
+    [selectedQuality, sortedQualities, currentTime, isPlaying]
+  );
 
   // Initialize or Switch Video Stream (Seamless position restoration like YouTube)
   useEffect(() => {
@@ -108,8 +247,14 @@ export default function NativePlayer({
     let retryCount = 0;
     let loadTimeout: number | null = window.setTimeout(() => {
       if (isLoading && video.readyState < 2) {
-        setIsLoading(false);
-        setHasError(true);
+        // If high quality timed out loading, try step down before showing full error
+        const currentRes = getResolutionNumber(selectedQuality);
+        if (currentRes > 720) {
+          stepDownQuality('network timeout');
+        } else {
+          setIsLoading(false);
+          setHasError(true);
+        }
       }
     }, 14000);
 
@@ -135,6 +280,7 @@ export default function NativePlayer({
         if (loadTimeout) clearTimeout(loadTimeout);
         setIsLoading(false);
         setHasError(false);
+        stallCountRef.current = 0;
 
         if (targetSeekTime > 0) {
           video.currentTime = targetSeekTime;
@@ -149,14 +295,20 @@ export default function NativePlayer({
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              if (retryCount < 2) {
+              if (retryCount < 1) {
                 retryCount++;
                 hls.startLoad();
               } else {
+                // Network error: step down quality if possible
                 if (loadTimeout) clearTimeout(loadTimeout);
                 hls.destroy();
-                setHasError(true);
-                setIsLoading(false);
+                const currentRes = getResolutionNumber(selectedQuality);
+                if (currentRes > 720) {
+                  stepDownQuality('network instability');
+                } else {
+                  setHasError(true);
+                  setIsLoading(false);
+                }
               }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
@@ -180,6 +332,7 @@ export default function NativePlayer({
         if (loadTimeout) clearTimeout(loadTimeout);
         setIsLoading(false);
         setHasError(false);
+        stallCountRef.current = 0;
 
         if (targetSeekTime > 0) {
           video.currentTime = targetSeekTime;
@@ -198,8 +351,14 @@ export default function NativePlayer({
 
       const onError = () => {
         if (loadTimeout) clearTimeout(loadTimeout);
-        setHasError(true);
-        setIsLoading(false);
+        // If error on 4K/VIP, try step down before failing
+        const currentRes = getResolutionNumber(selectedQuality);
+        if (currentRes > 720) {
+          stepDownQuality('stream error');
+        } else {
+          setHasError(true);
+          setIsLoading(false);
+        }
       };
 
       video.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
@@ -209,24 +368,56 @@ export default function NativePlayer({
 
     return () => {
       if (loadTimeout) clearTimeout(loadTimeout);
+      if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
     };
-  }, [selectedQuality]);
+  }, [selectedQuality, stepDownQuality]);
 
-  // Handle Quality Switch (YouTube Style: remembers exact timestamp and resumes)
-  const handleQualityChange = (newQuality: StreamQuality) => {
+  // Handle Manual Quality Selection (Persistent memory saved in localStorage)
+  const handleQualityChange = (newQuality: StreamQuality, isAuto: boolean = false) => {
     const video = videoRef.current;
     const currentPos = video ? video.currentTime : currentTime;
     const wasPlaying = video ? !video.paused : isPlaying;
 
     savedPlaybackTimeRef.current = currentPos;
     shouldResumePlayRef.current = wasPlaying;
+    stallCountRef.current = 0;
 
-    setSelectedQuality(newQuality);
+    setIsAutoQuality(isAuto);
+
+    if (isAuto) {
+      localStorage.setItem(PREFERRED_QUALITY_KEY, 'auto');
+      // In auto mode, pick 1080p if available
+      const p1080 = sortedQualities.find((q) => (q.resolution || 0) === 1080) || sortedQualities[0];
+      setSelectedQuality(p1080);
+      showNetworkToast('⚡ Auto quality enabled (Adaptive)');
+    } else {
+      const shortPref = newQuality.shortLabel || '1080p';
+      localStorage.setItem(PREFERRED_QUALITY_KEY, shortPref.toLowerCase());
+      setSelectedQuality(newQuality);
+    }
+
     setMenuView('closed');
+  };
+
+  // Monitor playback buffering/stalls to trigger smart YouTube auto-downgrade
+  const handleWaiting = () => {
+    setIsLoading(true);
+
+    // If stall lasts longer than 4.5 seconds on high quality (4K / 1080p), adaptively step down
+    if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
+    stallTimerRef.current = window.setTimeout(() => {
+      if (videoRef.current && videoRef.current.readyState < 3) {
+        stallCountRef.current += 1;
+        const currentRes = getResolutionNumber(selectedQuality);
+        if (currentRes > 480 && (isAutoQuality || stallCountRef.current >= 2)) {
+          stepDownQuality('buffering delay');
+        }
+      }
+    }, 4500);
   };
 
   // Video Time & Buffer Updates
@@ -490,20 +681,10 @@ export default function NativePlayer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handlePlayPause, playbackSpeed, duration, subtitles, selectedSubtitle]);
 
-  // Active Quality Short Display Badge (e.g. "4K", "1080p", "720p")
-  const currentBadgeText =
-    selectedQuality.shortLabel ||
-    (selectedQuality.label?.includes('4K')
-      ? '4K'
-      : selectedQuality.label?.includes('1440')
-      ? '1440p'
-      : selectedQuality.label?.includes('1080')
-      ? '1080p'
-      : selectedQuality.label?.includes('720')
-      ? '720p'
-      : selectedQuality.label?.includes('480')
-      ? '480p'
-      : 'HD');
+  // Active Quality Badge Display in Bottom Bar (e.g. "Auto (1080p)", "4K", "1080p")
+  const currentBadgeText = isAutoQuality
+    ? `Auto (${selectedQuality.shortLabel || '1080p'})`
+    : selectedQuality.shortLabel || '1080p';
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration > 0 ? (bufferedEnd / duration) * 100 : 0;
@@ -521,10 +702,11 @@ export default function NativePlayer({
         title={title}
         aria-label={title}
         onTimeUpdate={handleTimeUpdate}
-        onWaiting={() => setIsLoading(true)}
+        onWaiting={handleWaiting}
         onPlaying={() => {
           setIsLoading(false);
           setIsPlaying(true);
+          if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
         }}
         onPause={() => setIsPlaying(false)}
         onEnded={onEnded}
@@ -533,6 +715,14 @@ export default function NativePlayer({
         className="w-full h-full object-contain cursor-pointer"
         playsInline
       />
+
+      {/* Smart Network Toast Notification (YouTube Style) */}
+      {networkToast && (
+        <div className="absolute top-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900/95 text-white text-xs font-semibold shadow-2xl border border-zinc-700/80 backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-200">
+          <Wifi className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span>{networkToast}</span>
+        </div>
+      )}
 
       {/* YouTube Double-Tap Skip Feedback Animation */}
       {skipIndicator && (
@@ -566,7 +756,7 @@ export default function NativePlayer({
           <div className="max-w-md space-y-1">
             <h3 className="text-lg font-bold text-white">Stream Temporarily Unavailable</h3>
             <p className="text-xs text-zinc-400">
-              The selected quality is currently buffering. Try another resolution from the quality menu or switch to Server 2.
+              The selected stream could not connect. Switch to Server 2 (VidLink) for instant HD playback.
             </p>
           </div>
           <div className="flex items-center gap-3 pt-2">
@@ -731,7 +921,11 @@ export default function NativePlayer({
               className="px-2 py-1 rounded-md bg-zinc-800/90 hover:bg-zinc-700 text-white font-mono text-[11px] font-bold border border-white/10 hover:border-red-500/40 transition cursor-pointer flex items-center gap-1 shadow-sm"
               title="Change Video Quality"
             >
-              <span className="text-red-400 font-extrabold">{currentBadgeText}</span>
+              {isAutoQuality ? (
+                <span className="text-emerald-400 font-bold">{currentBadgeText}</span>
+              ) : (
+                <span className="text-red-400 font-extrabold">{currentBadgeText}</span>
+              )}
             </button>
 
             {/* Subtitles / CC Button */}
@@ -829,7 +1023,7 @@ export default function NativePlayer({
                   </>
                 )}
 
-                {/* 2. Quality Selection Sub-Menu (YouTube Style) */}
+                {/* 2. Quality Selection Sub-Menu (YouTube Style with Smart Auto option) */}
                 {menuView === 'quality' && (
                   <>
                     <button
@@ -840,16 +1034,37 @@ export default function NativePlayer({
                       <span>Quality for current video</span>
                     </button>
 
-                    <div className="max-h-60 overflow-y-auto space-y-0.5 pr-1">
-                      {qualities.map((q) => {
-                        const isSelected = selectedQuality.url === q.url;
-                        const is4k = q.label.includes('4K') || q.shortLabel === '4K';
-                        const isHd = q.label.includes('1080') || q.label.includes('720') || q.shortLabel === '1080p' || q.shortLabel === '720p';
+                    <div className="max-h-64 overflow-y-auto space-y-0.5 pr-1">
+                      {/* 1. YouTube-style Smart Auto option */}
+                      <button
+                        onClick={() => handleQualityChange(selectedQuality, true)}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-left cursor-pointer ${
+                          isAutoQuality
+                            ? 'bg-red-600 text-white font-bold shadow-md shadow-red-600/30'
+                            : 'text-zinc-200 hover:bg-zinc-800/80 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span>Auto (Smart Adaptive)</span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase">
+                            Auto
+                          </span>
+                        </div>
+                        {isAutoQuality && <Check className="w-4 h-4 shrink-0" />}
+                      </button>
+
+                      {/* 2. Distinct Sorted Resolutions */}
+                      {sortedQualities.map((q) => {
+                        const isSelected = !isAutoQuality && selectedQuality.url === q.url;
+                        const res = q.resolution || 1080;
+                        const is4k = res >= 2160;
+                        const isHd = (res === 1080 || res === 720) && !is4k;
+                        const isVip = (q as any).badgeType === 'vip';
 
                         return (
                           <button
                             key={q.url}
-                            onClick={() => handleQualityChange(q)}
+                            onClick={() => handleQualityChange(q, false)}
                             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-left cursor-pointer ${
                               isSelected
                                 ? 'bg-red-600 text-white font-bold shadow-md shadow-red-600/30'
@@ -858,14 +1073,19 @@ export default function NativePlayer({
                           >
                             <div className="flex items-center gap-2">
                               <span>{q.label}</span>
-                              {is4k && (
+                              {is4k && !isVip && (
                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-400/20 text-amber-300 border border-amber-400/30 uppercase">
                                   4K
                                 </span>
                               )}
-                              {isHd && !is4k && (
+                              {isHd && (
                                 <span className="px-1 py-0.5 rounded text-[9px] font-black bg-blue-500/20 text-blue-300 border border-blue-400/30 uppercase">
                                   HD
+                                </span>
+                              )}
+                              {isVip && (
+                                <span className="px-1 py-0.5 rounded text-[9px] font-black bg-purple-500/20 text-purple-300 border border-purple-400/30 uppercase">
+                                  VIP
                                 </span>
                               )}
                             </div>
