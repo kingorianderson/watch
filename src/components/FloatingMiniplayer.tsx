@@ -34,6 +34,8 @@ export default function FloatingMiniplayer() {
     currentTime,
     duration,
     isPlaying,
+    isPipActive,
+    setIsPipActive,
     updatePlayback,
     closePlayer,
     expandPlayer,
@@ -57,22 +59,29 @@ export default function FloatingMiniplayer() {
     const video = videoRef.current;
     if (!video) return;
 
-    const onEnterPip = () => setIsPip(true);
-    const onLeavePip = () => setIsPip(false);
+    const onEnterPip = () => {
+      setIsPip(true);
+      setIsPipActive(true);
+    };
+    const onLeavePip = () => {
+      setIsPip(false);
+      setIsPipActive(false);
+    };
 
     video.addEventListener('enterpictureinpicture', onEnterPip);
     video.addEventListener('leavepictureinpicture', onLeavePip);
 
-    // Initial check
+    // Check if browser already has this video in PiP
     if (typeof document !== 'undefined' && document.pictureInPictureElement === video) {
       setIsPip(true);
+      setIsPipActive(true);
     }
 
     return () => {
       video.removeEventListener('enterpictureinpicture', onEnterPip);
       video.removeEventListener('leavepictureinpicture', onLeavePip);
     };
-  }, [streamData]);
+  }, [streamData, setIsPipActive]);
 
   // Fetch Direct Stream data when active media changes
   useEffect(() => {
@@ -159,6 +168,10 @@ export default function FloatingMiniplayer() {
         if (isPlaying) {
           video.play().catch(() => {});
         }
+        // If user already had PiP active before route change, continue PiP
+        if (isPipActive && video.requestPictureInPicture && !document.pictureInPictureElement) {
+          video.requestPictureInPicture().catch(() => {});
+        }
         setIsLoading(false);
       });
 
@@ -185,6 +198,10 @@ export default function FloatingMiniplayer() {
         if (isPlaying) {
           video.play().catch(() => {});
         }
+        // If user already had PiP active before route change, continue PiP
+        if (isPipActive && video.requestPictureInPicture && !document.pictureInPictureElement) {
+          video.requestPictureInPicture().catch(() => {});
+        }
         setIsLoading(false);
       };
 
@@ -197,7 +214,7 @@ export default function FloatingMiniplayer() {
         hlsRef.current = null;
       }
     };
-  }, [isDocked, activeMedia, streamData]);
+  }, [isDocked, activeMedia, streamData, isPipActive]);
 
   // Video Time & Buffer event listeners
   const handleTimeUpdate = () => {
@@ -253,9 +270,11 @@ export default function FloatingMiniplayer() {
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
         setIsPip(false);
+        setIsPipActive(false);
       } else if (document.pictureInPictureEnabled && video.requestPictureInPicture) {
         await video.requestPictureInPicture();
         setIsPip(true);
+        setIsPipActive(true);
       }
     } catch (err) {
       console.warn('PiP error from miniplayer:', err);
@@ -281,6 +300,8 @@ export default function FloatingMiniplayer() {
 
   if (!isDocked || !activeMedia) return null;
 
+  const isAnyPipActive = isPip || isPipActive;
+
   const fallbackServer = STREAM_SERVERS[1]; // VidLink
   const fallbackUrl =
     activeMedia.type === 'tv'
@@ -292,7 +313,7 @@ export default function FloatingMiniplayer() {
   return (
     <>
       {/* 1. Sleek Compact Floating Pill when OS Picture-in-Picture is Active */}
-      {isPip && (
+      {isAnyPipActive && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-zinc-950/90 border border-red-500/50 backdrop-blur-xl px-4 py-2.5 rounded-2xl shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
@@ -328,6 +349,7 @@ export default function FloatingMiniplayer() {
                   await document.exitPictureInPicture().catch(() => {});
                 }
                 setIsPip(false);
+                setIsPipActive(false);
               }}
               className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition cursor-pointer"
               title="Dock back to In-App Miniplayer"
@@ -353,18 +375,18 @@ export default function FloatingMiniplayer() {
         </div>
       )}
 
-      {/* 2. Full In-App Floating Miniplayer Card (Collapsed to background when OS PiP is active so video stream remains connected) */}
+      {/* 2. Full In-App Floating Miniplayer Card (Collapsed when OS PiP is active so video stream remains connected) */}
       <div
         onMouseEnter={() => setShowControls(true)}
         onMouseLeave={() => setShowControls(false)}
         onMouseMove={handleMouseMove}
         className={`fixed bottom-6 right-6 z-50 rounded-2xl overflow-hidden shadow-2xl transition-all duration-300 group ${
-          isPip
-            ? 'opacity-0 pointer-events-none w-1 h-1 overflow-hidden -z-10'
+          isAnyPipActive
+            ? 'opacity-0 pointer-events-none fixed -bottom-[9999px] -right-[9999px] w-1 h-1 overflow-hidden -z-50'
             : 'w-72 sm:w-88 md:w-96 aspect-video bg-zinc-950 border border-zinc-700/80 ring-1 ring-zinc-700/50 hover:border-red-500/60 hover:shadow-red-600/20 animate-in slide-in-from-bottom-6 fade-in'
         }`}
         style={
-          !isPip
+          !isAnyPipActive
             ? {
                 boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(220, 38, 38, 0.15)',
               }
@@ -392,7 +414,7 @@ export default function FloatingMiniplayer() {
           )}
 
           {/* Loading Spinner */}
-          {isLoading && !isPip && (
+          {isLoading && !isAnyPipActive && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-zinc-950/80 backdrop-blur-xs pointer-events-none">
               <div className="w-8 h-8 border-3 border-red-500/20 border-t-red-500 rounded-full animate-spin mb-1.5" />
               <span className="text-[11px] text-zinc-300 font-medium">Connecting...</span>
@@ -400,7 +422,7 @@ export default function FloatingMiniplayer() {
           )}
 
           {/* Hover / Active Control Overlay */}
-          {!isPip && (
+          {!isAnyPipActive && (
             <div
               className={`absolute inset-0 z-30 bg-gradient-to-t from-black/90 via-black/40 to-black/80 flex flex-col justify-between p-3 transition-opacity duration-300 ${
                 showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
@@ -520,7 +542,7 @@ export default function FloatingMiniplayer() {
           )}
 
           {/* Minimalist Progress Line when controls are hidden */}
-          {!showControls && !isPip && (
+          {!showControls && !isAnyPipActive && (
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-950/60 z-20">
               <div
                 className="h-full bg-red-600 transition-all duration-200"

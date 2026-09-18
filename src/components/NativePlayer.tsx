@@ -30,6 +30,7 @@ import {
   fetchSubtitleCues,
   type SubtitleCue,
 } from '../services/subtitleService';
+import { usePlayer } from '../context/PlayerContext';
 
 interface NativePlayerProps {
   qualities: StreamQuality[];
@@ -216,6 +217,7 @@ export default function NativePlayer({
   }, [qualities]);
 
   // Core Playback State
+  const { setIsPipActive } = usePlayer();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -969,8 +971,14 @@ export default function NativePlayer({
 
   // Picture in Picture event synchronization
   useEffect(() => {
-    const onEnterPip = () => setIsPip(true);
-    const onLeavePip = () => setIsPip(false);
+    const onEnterPip = () => {
+      setIsPip(true);
+      setIsPipActive(true);
+    };
+    const onLeavePip = () => {
+      setIsPip(false);
+      setIsPipActive(false);
+    };
 
     const vA = videoRefA.current;
     const vB = videoRefB.current;
@@ -986,7 +994,7 @@ export default function NativePlayer({
       vB?.removeEventListener('enterpictureinpicture', onEnterPip);
       vB?.removeEventListener('leavepictureinpicture', onLeavePip);
     };
-  }, []);
+  }, [setIsPipActive]);
 
   const handleSpeedChange = (speed: number) => {
     setPlaybackSpeed(speed);

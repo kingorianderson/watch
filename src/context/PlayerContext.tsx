@@ -19,6 +19,8 @@ interface PlayerContextType {
   duration: number;
   isPlaying: boolean;
   isDocked: boolean;
+  isPipActive: boolean;
+  setIsPipActive: (active: boolean) => void;
   playMedia: (media: ActiveMedia) => void;
   updatePlayback: (current: number, dur: number, playing?: boolean) => void;
   closePlayer: () => void;
@@ -32,6 +34,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
+  const [isPipActive, setIsPipActive] = useState<boolean>(false);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -63,6 +66,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (typeof document !== 'undefined' && document.pictureInPictureElement) {
       document.exitPictureInPicture().catch(() => {});
     }
+    setIsPipActive(false);
     setActiveMedia(null);
     setCurrentTime(0);
     setDuration(0);
@@ -73,6 +77,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (typeof document !== 'undefined' && document.pictureInPictureElement) {
       document.exitPictureInPicture().catch(() => {});
     }
+    setIsPipActive(false);
 
     const current = activeMediaRef.current;
     if (!current) return;
@@ -94,6 +99,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         duration,
         isPlaying,
         isDocked,
+        isPipActive,
+        setIsPipActive,
         playMedia,
         updatePlayback,
         closePlayer,
