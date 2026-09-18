@@ -26,21 +26,22 @@ export default function UserProfileMenu() {
   if (!user) return null;
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative shrink-0 flex items-center justify-center" ref={menuRef}>
       {/* Trigger Button: User Avatar */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 p-1 rounded-full hover:ring-2 hover:ring-red-500/50 transition duration-200 group"
+        className="flex items-center justify-center p-0.5 rounded-full hover:ring-2 hover:ring-red-500/50 transition duration-200 group shrink-0"
+        title={user.name}
       >
-        <div className="relative">
+        <div className="relative w-9 h-9 min-w-[36px] min-h-[36px] shrink-0 flex items-center justify-center aspect-square">
           <img
             src={user.avatar}
             alt={user.name}
-            className="w-8 h-8 rounded-full object-cover bg-zinc-800 border-2 border-zinc-700 group-hover:border-red-500 transition shadow"
+            className="w-9 h-9 min-w-[36px] min-h-[36px] aspect-square rounded-full object-cover bg-zinc-800 border-2 border-zinc-700 group-hover:border-red-500 transition shadow shrink-0"
           />
           {/* Provider badge */}
           <span
-            className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] text-white font-bold border border-zinc-950 ${
+            className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[8.5px] text-white font-extrabold border-2 border-zinc-950 shadow shrink-0 ${
               user.provider === 'google'
                 ? 'bg-amber-500'
                 : user.provider === 'facebook'
@@ -61,7 +62,7 @@ export default function UserProfileMenu() {
             <img
               src={user.avatar}
               alt={user.name}
-              className="w-11 h-11 rounded-full object-cover bg-zinc-800 border border-zinc-700 shrink-0"
+              className="w-11 h-11 min-w-[44px] min-h-[44px] aspect-square rounded-full object-cover bg-zinc-800 border border-zinc-700 shrink-0"
             />
             <div className="flex-1 min-w-0">
               <h4 className="text-sm font-bold text-white truncate">{user.name}</h4>
