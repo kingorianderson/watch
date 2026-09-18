@@ -165,7 +165,7 @@ export default function AuthModal() {
             <div className="bg-zinc-950/60 border border-zinc-800/60 rounded-2xl p-3.5 space-y-2 text-xs text-zinc-300">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>Save movies & TV shows to your Watchlist</span>
+                <span>Save movies & shows to your Watchlist</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />

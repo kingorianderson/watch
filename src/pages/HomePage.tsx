@@ -12,11 +12,11 @@ import { useMetaTags } from '../hooks/useMetaTags';
 import { isPlaybackCompleted, isPlaybackPreview } from '../utils/historyHelpers';
 
 export default function HomePage() {
-  usePageTitle('Stream Movies & TV Series Online in HD');
+  usePageTitle('Stream Movies & Shows Online in HD');
 
   useMetaTags({
-    title: 'WATCHD - Stream Movies & TV Series Online in HD',
-    description: 'Watch thousands of trending movies and TV series in HD with instant streaming, chronological universe timelines, and subtitles.',
+    title: 'WATCHD - Stream Movies & Shows Online in HD',
+    description: 'Watch thousands of trending movies and shows in HD with instant streaming, chronological universe timelines, and subtitles.',
     url: window.location.href,
     type: 'website',
   });
@@ -206,7 +206,7 @@ export default function HomePage() {
           onOpenDetails={(item) => setModalItem(item)}
         />
         <MediaRow
-          title="Popular TV Series"
+          title="Popular Shows"
           items={popularTv}
           icon={<Tv className="w-5 h-5 text-blue-500" />}
           onOpenDetails={(item) => setModalItem(item)}

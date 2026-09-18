@@ -76,7 +76,7 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-20">
           <div className="flex items-center gap-1">
             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-zinc-950/85 backdrop-blur-md text-red-400 border border-red-500/20 shadow">
-              {isTv ? 'TV Show' : 'Movie'}
+              {isTv ? 'Show' : 'Movie'}
             </span>
             {isTv && lastWatched?.season && (
               <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-zinc-900/90 text-zinc-300 border border-zinc-700/60 font-mono">

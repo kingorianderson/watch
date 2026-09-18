@@ -68,7 +68,7 @@ export default function HeroBanner({ items, onOpenDetails }: HeroBannerProps) {
               <Sparkles className="w-3.5 h-3.5" /> Trending Spotlight
             </span>
             <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-900/80 text-zinc-300 border border-zinc-700/50">
-              {isTv ? 'TV Series' : 'Movie'}
+              {isTv ? 'Show' : 'Movie'}
             </span>
           </div>
 

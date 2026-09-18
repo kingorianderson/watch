@@ -29,7 +29,7 @@ const SORT_OPTIONS = [
 ];
 
 export default function SeriesPage() {
-  usePageTitle('TV Series');
+  usePageTitle('Explore Shows');
   const [series, setSeries] = useState<MediaItem[]>([]);
   const [genre, setGenre] = useState('all');
   const [year, setYear] = useState('all');
@@ -73,10 +73,10 @@ export default function SeriesPage() {
         <div>
           <div className="flex items-center gap-2">
             <Tv className="w-6 h-6 text-red-500" />
-            <h1 className="text-3xl font-black tracking-tight text-white m-0">TV Series & Shows</h1>
+            <h1 className="text-3xl font-black tracking-tight text-white m-0">Explore Shows</h1>
           </div>
           <p className="text-sm text-zinc-400 mt-1">
-            Stream popular TV series, anime, and dramas with all seasons and episodes.
+            Browse trending shows, anime, miniseries, and dramas with all seasons and episodes.
           </p>
         </div>
 

@@ -168,7 +168,7 @@ export default function MediaDetailsModal({ item, onClose, onSelectMovie }: Medi
               <div className="flex-1 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase bg-red-600/20 text-red-400 border border-red-500/30">
-                    {isTv ? 'TV Series' : 'Movie'}
+                    {isTv ? 'Show' : 'Movie'}
                   </span>
                   {current.genres &&
                     current.genres.map((g) => (

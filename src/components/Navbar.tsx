@@ -215,7 +215,9 @@ export default function Navbar() {
   };
 
   const navLinks = [
+    { name: 'Live Sports', path: '/sports', icon: Trophy, isLive: true },
     { name: 'Movies', path: '/movies', icon: Film },
+    { name: 'TV Series', path: '/series', icon: Tv },
     { name: 'Shows', path: '/series', icon: Tv },
     { name: 'Watchlist', path: '/watchlist', icon: Bookmark, count: watchlist.length },
     { name: 'Live Sports', path: '/sports', icon: Trophy, isLive: true },
@@ -369,7 +371,7 @@ export default function Navbar() {
                               </h4>
                               <div className="flex items-center gap-2 mt-1 text-xs text-zinc-400">
                                 <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-red-400 font-mono text-[10px] font-bold uppercase">
-                                  {isTv ? 'TV Show' : 'Movie'}
+                                  {isTv ? 'Show' : 'Movie'}
                                 </span>
                                 {year && <span>{year}</span>}
                                 <span className="flex items-center gap-1 text-amber-400 font-semibold">
@@ -608,7 +610,7 @@ export default function Navbar() {
               <input
                 ref={mobileInputRef}
                 type="text"
-                placeholder="Search movies, TV shows, actors..."
+                placeholder="Search movies, shows, actors..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-zinc-900 text-base text-zinc-100 placeholder-zinc-500 pl-10 pr-10 py-2.5 rounded-full border border-zinc-700/60 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/30 transition shadow-inner"
@@ -674,7 +676,7 @@ export default function Navbar() {
                           </h4>
                           <div className="flex items-center gap-2 mt-1.5 text-xs text-zinc-400">
                             <span className="px-2 py-0.5 rounded-md bg-zinc-800 text-red-400 font-mono text-[10px] font-bold uppercase">
-                              {isTv ? 'TV Show' : 'Movie'}
+                              {isTv ? 'Show' : 'Movie'}
                             </span>
                             {year && <span>{year}</span>}
                             <span className="flex items-center gap-1 text-amber-400 font-semibold ml-auto">

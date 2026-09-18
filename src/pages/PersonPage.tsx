@@ -331,7 +331,7 @@ export default function PersonPage() {
                 }`}
               >
                 <Tv className="w-3.5 h-3.5" />
-                <span>TV Series ({credits?.cast.filter((c) => c.media_type === 'tv').length || 0})</span>
+                <span>Shows ({credits?.cast.filter((c) => c.media_type === 'tv').length || 0})</span>
               </button>
 
               {credits?.crew && credits.crew.length > 0 && (
