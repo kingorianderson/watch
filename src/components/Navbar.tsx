@@ -227,8 +227,8 @@ export default function Navbar() {
       <nav
         className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 h-16 ${
           isScrolled
-            ? 'bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800/80 shadow-2xl shadow-black/50'
-            : 'bg-gradient-to-b from-zinc-950 via-zinc-950/70 to-transparent'
+            ? 'bg-zinc-950/75 backdrop-blur-xl border-b border-white/[0.08] shadow-2xl shadow-black/60'
+            : 'bg-zinc-950/40 backdrop-blur-md border-b border-white/[0.06] shadow-sm'
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between gap-3">
@@ -238,7 +238,7 @@ export default function Navbar() {
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 flex items-center justify-center shadow-lg shadow-red-600/30 group-hover:scale-105 transition duration-200">
                 <Play className="w-4 h-4 text-white fill-white ml-0.5" />
               </div>
-              <span className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center">
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-white drop-shadow-md flex items-center">
                 WATC<span className="text-red-500 font-bold ml-0.5">HD</span>
               </span>
             </Link>
@@ -251,13 +251,13 @@ export default function Navbar() {
                   <Link
                     key={link.name}
                     to={link.path}
-                    className={`px-3.5 py-1.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                    className={`px-3.5 py-1.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 drop-shadow-sm ${
                       isActive
-                        ? 'text-white bg-zinc-800/90 shadow-inner'
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
+                        ? 'text-white bg-white/15 backdrop-blur-md shadow-sm border border-white/10'
+                        : 'text-zinc-200 hover:text-white hover:bg-white/10'
                     }`}
                   >
-                    {link.icon && <link.icon className={`w-4 h-4 ${link.isLive ? 'text-red-500' : ''}`} />}
+                    {link.icon && <link.icon className={`w-4 h-4 ${link.isLive ? 'text-red-500 drop-shadow' : ''}`} />}
                     <span>{link.name}</span>
                     {link.isLive && (
                       <span className="flex h-2 w-2 relative ml-0.5">
@@ -266,7 +266,7 @@ export default function Navbar() {
                       </span>
                     )}
                     {link.count !== undefined && link.count > 0 && (
-                      <span className="px-1.5 py-0.5 bg-red-600/30 text-red-400 rounded-full text-[10px] font-mono font-bold leading-none">
+                      <span className="px-1.5 py-0.5 bg-red-600 text-white rounded-full text-[10px] font-mono font-bold leading-none shadow-sm">
                         {link.count}
                       </span>
                     )}
@@ -277,7 +277,7 @@ export default function Navbar() {
               {/* Desktop Support Button */}
               <button
                 onClick={openSupportModal}
-                className="ml-2 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition hover:scale-105 flex items-center gap-1.5 cursor-pointer shrink-0"
+                className="ml-2 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition hover:scale-105 flex items-center gap-1.5 cursor-pointer shrink-0 backdrop-blur-md shadow-sm"
                 title="Support WATCHD with a tip"
               >
                 <Heart className="w-3.5 h-3.5 text-red-400 fill-red-400 animate-pulse" />
@@ -298,7 +298,7 @@ export default function Navbar() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setShowSearchDropdown(true)}
-                  className="w-full bg-zinc-900/90 hover:bg-zinc-900 text-sm text-zinc-100 placeholder-zinc-500 pl-10 pr-20 py-2 rounded-full border border-zinc-700/60 focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/30 transition-all shadow-inner"
+                  className="w-full bg-zinc-900/60 hover:bg-zinc-900/80 text-sm text-white placeholder-zinc-400 pl-10 pr-20 py-2 rounded-full border border-white/15 focus:outline-none focus:border-red-500 focus:bg-zinc-950/90 focus:ring-2 focus:ring-red-500/30 backdrop-blur-md transition-all shadow-inner"
                 />
 
                 {/* Search Icon or Loading Spinner */}
@@ -306,7 +306,7 @@ export default function Navbar() {
                   {isSearching ? (
                     <Loader2 className="w-4 h-4 text-red-500 animate-spin" />
                   ) : (
-                    <Search className="w-4 h-4 text-zinc-400" />
+                    <Search className="w-4 h-4 text-zinc-300" />
                   )}
                 </div>
 
@@ -326,7 +326,7 @@ export default function Navbar() {
                       <X className="w-3.5 h-3.5" />
                     </button>
                   ) : (
-                    <span className="hidden lg:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-400 bg-zinc-800 border border-zinc-700/60 rounded-md select-none pointer-events-none">
+                    <span className="hidden lg:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-300 bg-white/10 border border-white/15 rounded-md select-none pointer-events-none backdrop-blur-sm">
                       Ctrl K
                     </span>
                   )}
@@ -472,7 +472,7 @@ export default function Navbar() {
                 setMobileSearchOpen(true);
                 setMobileMenuOpen(false);
               }}
-              className="md:hidden p-2 rounded-xl text-zinc-300 hover:text-white bg-zinc-900/80 border border-zinc-800/80 hover:bg-zinc-800 active:scale-95 transition"
+              className="md:hidden p-2 rounded-xl text-zinc-200 hover:text-white bg-zinc-900/60 hover:bg-zinc-900/90 border border-white/15 backdrop-blur-md active:scale-95 transition"
               aria-label="Open Search"
             >
               <Search className="w-5 h-5" />
@@ -484,7 +484,7 @@ export default function Navbar() {
             ) : (
               <button
                 onClick={openAuthModal}
-                className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-lg shadow-red-600/30 hover:scale-105 active:scale-95 transition duration-200 shrink-0 cursor-pointer"
+                className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-lg shadow-red-600/30 hover:scale-105 active:scale-95 transition duration-200 shrink-0 cursor-pointer border border-white/10"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Sign In</span>
@@ -497,7 +497,7 @@ export default function Navbar() {
                 setMobileMenuOpen(!mobileMenuOpen);
                 if (!mobileMenuOpen) setMobileSearchOpen(false);
               }}
-              className="md:hidden p-2 text-zinc-300 hover:text-white rounded-xl bg-zinc-900/80 border border-zinc-800/80 hover:bg-zinc-800 active:scale-95 transition shrink-0"
+              className="md:hidden p-2 text-zinc-200 hover:text-white rounded-xl bg-zinc-900/60 hover:bg-zinc-900/90 border border-white/15 backdrop-blur-md active:scale-95 transition shrink-0"
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -507,7 +507,7 @@ export default function Navbar() {
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-zinc-950/98 border-b border-zinc-800/80 px-4 py-3 space-y-1.5 backdrop-blur-2xl animate-in slide-in-from-top-2 shadow-2xl">
+          <div className="md:hidden bg-zinc-950/90 border-b border-white/10 px-4 py-3 space-y-1.5 backdrop-blur-2xl animate-in slide-in-from-top-2 shadow-2xl">
             {navLinks.map((link) => {
               const isActive = location.pathname === link.path;
               return (
@@ -518,7 +518,7 @@ export default function Navbar() {
                   className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
                     isActive
                       ? 'text-white bg-red-600/20 border border-red-500/30'
-                      : 'text-zinc-300 hover:text-white hover:bg-zinc-900'
+                      : 'text-zinc-200 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -532,7 +532,7 @@ export default function Navbar() {
                     </span>
                   )}
                   {link.count !== undefined && link.count > 0 && (
-                    <span className="px-2 py-0.5 bg-red-600/30 text-red-400 rounded-full text-xs font-mono font-bold">
+                    <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-xs font-mono font-bold shadow-sm">
                       {link.count}
                     </span>
                   )}
@@ -546,7 +546,7 @@ export default function Navbar() {
                 setMobileMenuOpen(false);
                 openSupportModal();
               }}
-              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-amber-300 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition cursor-pointer mt-1"
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-amber-300 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 transition cursor-pointer mt-1"
             >
               <div className="flex items-center gap-3">
                 <Heart className="w-4 h-4 text-red-400 fill-red-400" />

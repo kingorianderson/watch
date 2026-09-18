@@ -56,7 +56,7 @@ export default function HeroBanner({ items, onOpenDetails }: HeroBannerProps) {
         {/* Vignette Gradients */}
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/70 to-transparent" />
-        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-zinc-950/80 to-transparent" />
+        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/40 to-transparent" />
       </div>
 
       {/* Content Container */}
