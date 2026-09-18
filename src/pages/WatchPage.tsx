@@ -262,7 +262,7 @@ export default function WatchPage() {
   }, [id, mediaType, currentSeason, currentEpisode, location.state]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pt-20 pb-24">
+    <div className="min-h-screen bg-zinc-950 text-white pt-24 sm:pt-28 pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Navigation & Breadcrumb Header */}
         <div className="flex items-center gap-3 py-1 overflow-x-auto whitespace-nowrap no-scrollbar">

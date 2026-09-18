@@ -63,7 +63,7 @@ export default function SportsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pt-20 pb-24">
+    <div className="min-h-screen bg-zinc-950 text-white pt-24 sm:pt-28 pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Active Theater Player Container when a match is opened */}
         {activeMatch && activeStream && (

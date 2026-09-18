@@ -224,14 +224,14 @@ export default function Navbar() {
 
   return (
     <>
-      <nav
-        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 h-16 ${
-          isScrolled
-            ? 'bg-zinc-950/75 backdrop-blur-xl border-b border-white/[0.08] shadow-2xl shadow-black/60'
-            : 'bg-zinc-950/40 backdrop-blur-md border-b border-white/[0.06] shadow-sm'
-        }`}
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between gap-3">
+      <header className="fixed top-2.5 sm:top-4 inset-x-0 z-40 px-3 sm:px-6 lg:px-8 flex flex-col items-center pointer-events-none transition-all duration-300">
+        <nav
+          className={`pointer-events-auto w-full max-w-7xl transition-all duration-300 rounded-2xl sm:rounded-full border shadow-2xl ${
+            isScrolled
+              ? 'bg-zinc-950/85 backdrop-blur-2xl border-white/15 shadow-black/80 ring-1 ring-white/10 h-14 sm:h-16 px-3.5 sm:px-6'
+              : 'bg-zinc-950/60 backdrop-blur-xl border-white/10 shadow-black/60 ring-1 ring-white/5 h-14 sm:h-16 px-3.5 sm:px-6'
+          } flex items-center justify-between gap-3`}
+        >
           {/* Brand Logo */}
           <div className="flex items-center gap-6 lg:gap-8">
             <Link to="/" className="flex items-center gap-2.5 group shrink-0">
@@ -503,11 +503,11 @@ export default function Navbar() {
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
-        </div>
+        </nav>
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-zinc-950/90 border-b border-white/10 px-4 py-3 space-y-1.5 backdrop-blur-2xl animate-in slide-in-from-top-2 shadow-2xl">
+          <div className="pointer-events-auto md:hidden mt-2 w-full max-w-7xl bg-zinc-950/95 backdrop-blur-2xl border border-white/15 rounded-2xl p-3 space-y-1.5 shadow-2xl shadow-black/90 animate-in fade-in slide-in-from-top-2 duration-150">
             {navLinks.map((link) => {
               const isActive = location.pathname === link.path;
               return (
@@ -558,7 +558,7 @@ export default function Navbar() {
             </button>
           </div>
         )}
-      </nav>
+      </header>
 
       {/* Full-Screen Mobile Search Overlay */}
       {mobileSearchOpen && (

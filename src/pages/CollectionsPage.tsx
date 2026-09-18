@@ -49,7 +49,7 @@ export default function CollectionsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pt-20 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-zinc-950 text-white pt-24 sm:pt-28 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
       {/* Back Navigation Button */}
       <div className="flex items-center gap-3 pt-2">
         <button
