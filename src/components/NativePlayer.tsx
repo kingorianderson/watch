@@ -35,6 +35,7 @@ interface NativePlayerProps {
   qualities: StreamQuality[];
   subtitles?: SubtitleTrack[];
   title: string;
+  tmdbId?: number | string;
   mediaType?: 'movie' | 'tv';
   season?: number;
   episode?: number;
@@ -168,6 +169,7 @@ export default function NativePlayer({
   qualities,
   subtitles = [],
   title,
+  tmdbId,
   mediaType = 'movie',
   season = 1,
   episode = 1,
@@ -305,10 +307,15 @@ export default function NativePlayer({
     setIsFetchingSubtitles(true);
 
     subtitleService
-      .getSubtitles(title, mediaType, season, episode, releaseYear)
+      .getSubtitles(title, mediaType, season, episode, releaseYear, tmdbId)
       .then((subs) => {
         if (isMounted && subs.length > 0) {
           setLoadedSubtitles(subs);
+          // Pre-fetch cues for the default track so toggle is instantaneous
+          const def = subs.find((s) => s.isDefault) || subs[0];
+          if (def) {
+            fetchSubtitleCues(def.downloadUrl || def.url);
+          }
         }
       })
       .catch((err) => {
@@ -321,9 +328,9 @@ export default function NativePlayer({
     return () => {
       isMounted = false;
     };
-  }, [title, mediaType, season, episode, releaseYear, loadedSubtitles.length]);
+  }, [title, mediaType, season, episode, releaseYear, tmdbId, loadedSubtitles.length]);
 
-  // Fetch structured cues whenever selected subtitle changes
+  // Fetch structured cues whenever selectedSubtitle changes
   useEffect(() => {
     if (selectedSubtitle === 'off') {
       setParsedCues([]);
@@ -345,7 +352,7 @@ export default function NativePlayer({
   // Derive current active subtitle cue for real-time overlay
   const activeCue = useMemo(() => {
     if (!parsedCues.length || selectedSubtitle === 'off') return null;
-    return parsedCues.find((c) => currentTime >= c.start && currentTime <= c.end) || null;
+    return parsedCues.find((c) => currentTime >= c.start && currentTime <= c.end + 0.15) || null;
   }, [parsedCues, currentTime, selectedSubtitle]);
 
   // Keep selectedQuality synchronized if sortedQualities updates
@@ -1273,11 +1280,11 @@ export default function NativePlayer({
       {/* Custom High-Fidelity Subtitle Overlay (Dynamic elevation above controls) */}
       {activeCue && selectedSubtitle !== 'off' && (
         <div
-          className={`absolute inset-x-0 pointer-events-none flex justify-center z-25 px-4 transition-all duration-300 ${
-            showControls || !isPlaying ? 'bottom-24 sm:bottom-28' : 'bottom-8 sm:bottom-12'
+          className={`absolute inset-x-0 pointer-events-none flex justify-center z-[35] px-4 transition-all duration-300 ${
+            showControls || !isPlaying ? 'bottom-20 sm:bottom-24' : 'bottom-6 sm:bottom-10'
           }`}
         >
-          <div className="flex flex-col items-center justify-center space-y-1 text-center max-w-4xl">
+          <div className="flex flex-col items-center justify-center space-y-1 text-center max-w-4xl drop-shadow-2xl">
             {activeCue.lines.map((line, idx) => (
               <span
                 key={idx}

@@ -132,7 +132,7 @@ export const directStreamService = {
         // Fallback to subtitleService if worker returned no subtitles
         if (subtitles.length === 0) {
           try {
-            subtitles = await subtitleService.getSubtitles(cleanTitle, isTv ? 'tv' : 'movie', season, episode, year);
+            subtitles = await subtitleService.getSubtitles(cleanTitle, isTv ? 'tv' : 'movie', season, episode, year, tmdbId);
           } catch (subErr) {
             console.warn('Subtitle fallback error:', subErr);
           }

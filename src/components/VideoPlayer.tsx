@@ -346,6 +346,7 @@ export default function VideoPlayer({
           directStreamData ? (
             <NativePlayer
               key={`native-${tmdbId}-${season}-${episode}`}
+              tmdbId={tmdbId}
               qualities={directStreamData.qualities}
               subtitles={directStreamData.subtitles}
               title={title}
