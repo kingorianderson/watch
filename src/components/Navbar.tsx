@@ -224,21 +224,21 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="fixed top-2.5 sm:top-4 inset-x-0 z-40 px-3 sm:px-6 lg:px-8 flex flex-col items-center pointer-events-none transition-all duration-300">
+      <header className="fixed top-3 sm:top-5 inset-x-0 z-40 px-3 sm:px-6 flex flex-col items-center pointer-events-none transition-all duration-300">
         <nav
-          className={`pointer-events-auto w-full max-w-7xl transition-all duration-300 rounded-2xl sm:rounded-full border shadow-2xl ${
+          className={`pointer-events-auto w-full max-w-5xl lg:max-w-6xl rounded-full transition-all duration-300 border shadow-2xl ${
             isScrolled
-              ? 'bg-zinc-950/85 backdrop-blur-2xl border-white/15 shadow-black/80 ring-1 ring-white/10 h-14 sm:h-16 px-3.5 sm:px-6'
-              : 'bg-zinc-950/60 backdrop-blur-xl border-white/10 shadow-black/60 ring-1 ring-white/5 h-14 sm:h-16 px-3.5 sm:px-6'
-          } flex items-center justify-between gap-3`}
+              ? 'bg-zinc-950/85 backdrop-blur-2xl border-white/20 shadow-black/90 ring-1 ring-white/10 py-1.5 sm:py-2 px-3 sm:px-4'
+              : 'bg-black/40 backdrop-blur-2xl border-white/15 shadow-black/70 ring-1 ring-white/10 py-1.5 sm:py-2 px-3 sm:px-4'
+          } flex items-center justify-between gap-2 sm:gap-4`}
         >
           {/* Brand Logo */}
-          <div className="flex items-center gap-6 lg:gap-8">
-            <Link to="/" className="flex items-center gap-2.5 group shrink-0">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 flex items-center justify-center shadow-lg shadow-red-600/30 group-hover:scale-105 transition duration-200">
-                <Play className="w-4 h-4 text-white fill-white ml-0.5" />
+          <div className="flex items-center gap-3 sm:gap-6 lg:gap-8">
+            <Link to="/" className="flex items-center gap-2 group shrink-0 pl-1">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 flex items-center justify-center shadow-md shadow-red-600/30 group-hover:scale-105 transition duration-200">
+                <Play className="w-3.5 h-3.5 text-white fill-white ml-0.5" />
               </div>
-              <span className="text-xl sm:text-2xl font-black tracking-tight text-white drop-shadow-md flex items-center">
+              <span className="text-lg sm:text-xl font-black tracking-tight text-white drop-shadow-md flex items-center">
                 WATC<span className="text-red-500 font-bold ml-0.5">HD</span>
               </span>
             </Link>
@@ -251,13 +251,23 @@ export default function Navbar() {
                   <Link
                     key={link.name}
                     to={link.path}
-                    className={`px-3.5 py-1.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 drop-shadow-sm ${
+                    className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-1.5 shrink-0 ${
                       isActive
-                        ? 'text-white bg-white/15 backdrop-blur-md shadow-sm border border-white/10'
-                        : 'text-zinc-200 hover:text-white hover:bg-white/10'
+                        ? 'bg-white text-zinc-950 font-bold shadow-md scale-[1.02]'
+                        : 'text-zinc-300 hover:text-white hover:bg-white/10'
                     }`}
                   >
-                    {link.icon && <link.icon className={`w-4 h-4 ${link.isLive ? 'text-red-500 drop-shadow' : ''}`} />}
+                    {link.icon && (
+                      <link.icon
+                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
+                          isActive
+                            ? 'text-zinc-950'
+                            : link.isLive
+                            ? 'text-red-500 drop-shadow'
+                            : 'text-zinc-400'
+                        }`}
+                      />
+                    )}
                     <span>{link.name}</span>
                     {link.isLive && (
                       <span className="flex h-2 w-2 relative ml-0.5">
@@ -266,7 +276,11 @@ export default function Navbar() {
                       </span>
                     )}
                     {link.count !== undefined && link.count > 0 && (
-                      <span className="px-1.5 py-0.5 bg-red-600 text-white rounded-full text-[10px] font-mono font-bold leading-none shadow-sm">
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold leading-none ${
+                          isActive ? 'bg-zinc-950 text-white' : 'bg-red-600 text-white shadow-sm'
+                        }`}
+                      >
                         {link.count}
                       </span>
                     )}
@@ -277,7 +291,7 @@ export default function Navbar() {
               {/* Desktop Support Button */}
               <button
                 onClick={openSupportModal}
-                className="ml-2 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition hover:scale-105 flex items-center gap-1.5 cursor-pointer shrink-0 backdrop-blur-md shadow-sm"
+                className="ml-1 px-3 py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-semibold transition hover:scale-105 flex items-center gap-1.5 cursor-pointer shrink-0 backdrop-blur-md"
                 title="Support WATCHD with a tip"
               >
                 <Heart className="w-3.5 h-3.5 text-red-400 fill-red-400 animate-pulse" />
@@ -287,31 +301,34 @@ export default function Navbar() {
           </div>
 
           {/* Desktop Search Bar & User Actions */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-1 justify-end max-w-xl">
-            {/* Desktop-only Search Bar */}
-            <div className="relative hidden md:block w-full max-w-xs md:max-w-md" ref={searchRef}>
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-1 justify-end max-w-sm sm:max-w-md">
+            {/* Subtle vertical divider */}
+            <div className="h-5 w-px bg-white/15 hidden md:block mr-1" />
+
+            {/* Desktop-only Compact Search Bar */}
+            <div className="relative hidden md:block w-36 lg:w-56" ref={searchRef}>
               <form onSubmit={handleSearchSubmit} className="relative">
                 <input
                   ref={desktopInputRef}
                   type="text"
-                  placeholder="Search movies, TV shows, actors..."
+                  placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setShowSearchDropdown(true)}
-                  className="w-full bg-zinc-900/60 hover:bg-zinc-900/80 text-sm text-white placeholder-zinc-400 pl-10 pr-20 py-2 rounded-full border border-white/15 focus:outline-none focus:border-red-500 focus:bg-zinc-950/90 focus:ring-2 focus:ring-red-500/30 backdrop-blur-md transition-all shadow-inner"
+                  className="w-full bg-white/10 hover:bg-white/15 focus:bg-zinc-950/90 text-xs sm:text-sm text-white placeholder-zinc-400 pl-8 pr-10 py-1.5 rounded-full border border-white/10 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/20 backdrop-blur-md transition-all shadow-inner"
                 />
 
                 {/* Search Icon or Loading Spinner */}
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
                   {isSearching ? (
-                    <Loader2 className="w-4 h-4 text-red-500 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 text-red-500 animate-spin" />
                   ) : (
-                    <Search className="w-4 h-4 text-zinc-300" />
+                    <Search className="w-3.5 h-3.5 text-zinc-300" />
                   )}
                 </div>
 
                 {/* Right Badges / Clear Button */}
-                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                   {searchQuery ? (
                     <button
                       type="button"
@@ -320,14 +337,14 @@ export default function Navbar() {
                         setSearchResults([]);
                         desktopInputRef.current?.focus();
                       }}
-                      className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+                      className="p-0.5 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
                       title="Clear search"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-3 h-3" />
                     </button>
                   ) : (
-                    <span className="hidden lg:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-300 bg-white/10 border border-white/15 rounded-md select-none pointer-events-none backdrop-blur-sm">
-                      Ctrl K
+                    <span className="hidden lg:inline-flex items-center px-1 py-0.2 text-[9px] font-mono font-bold text-zinc-300 bg-white/10 border border-white/15 rounded-md select-none pointer-events-none backdrop-blur-sm">
+                      /
                     </span>
                   )}
                 </div>
@@ -335,7 +352,7 @@ export default function Navbar() {
 
               {/* Desktop Interactive Search Dropdown */}
               {showSearchDropdown && (
-                <div className="absolute right-0 w-[420px] mt-2 bg-zinc-900/95 backdrop-blur-2xl border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 divide-y divide-zinc-800/80">
+                <div className="absolute right-0 w-[400px] mt-2.5 bg-zinc-900/95 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 divide-y divide-zinc-800/80">
                   {/* 1. Live TMDB Results */}
                   {searchQuery.trim() && searchResults.length > 0 && (
                     <div className="max-h-[380px] overflow-y-auto p-2 divide-y divide-zinc-800/50">
@@ -472,10 +489,10 @@ export default function Navbar() {
                 setMobileSearchOpen(true);
                 setMobileMenuOpen(false);
               }}
-              className="md:hidden p-2 rounded-xl text-zinc-200 hover:text-white bg-zinc-900/60 hover:bg-zinc-900/90 border border-white/15 backdrop-blur-md active:scale-95 transition"
+              className="md:hidden p-2 rounded-full text-zinc-200 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 backdrop-blur-md active:scale-95 transition"
               aria-label="Open Search"
             >
-              <Search className="w-5 h-5" />
+              <Search className="w-4 h-4" />
             </button>
 
             {/* User Profile or Sign In Button */}
@@ -484,7 +501,7 @@ export default function Navbar() {
             ) : (
               <button
                 onClick={openAuthModal}
-                className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-lg shadow-red-600/30 hover:scale-105 active:scale-95 transition duration-200 shrink-0 cursor-pointer border border-white/10"
+                className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-lg shadow-red-600/30 hover:scale-105 active:scale-95 transition duration-200 shrink-0 cursor-pointer border border-white/10"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Sign In</span>
@@ -497,17 +514,17 @@ export default function Navbar() {
                 setMobileMenuOpen(!mobileMenuOpen);
                 if (!mobileMenuOpen) setMobileSearchOpen(false);
               }}
-              className="md:hidden p-2 text-zinc-200 hover:text-white rounded-xl bg-zinc-900/60 hover:bg-zinc-900/90 border border-white/15 backdrop-blur-md active:scale-95 transition shrink-0"
+              className="md:hidden p-2 text-zinc-200 hover:text-white rounded-full bg-white/10 hover:bg-white/20 border border-white/10 backdrop-blur-md active:scale-95 transition shrink-0"
               aria-label="Toggle menu"
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
           </div>
         </nav>
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="pointer-events-auto md:hidden mt-2 w-full max-w-7xl bg-zinc-950/95 backdrop-blur-2xl border border-white/15 rounded-2xl p-3 space-y-1.5 shadow-2xl shadow-black/90 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="pointer-events-auto md:hidden mt-2 w-full max-w-md bg-zinc-950/95 backdrop-blur-2xl border border-white/15 rounded-3xl p-3 space-y-1.5 shadow-2xl shadow-black/90 animate-in fade-in slide-in-from-top-2 duration-150">
             {navLinks.map((link) => {
               const isActive = location.pathname === link.path;
               return (
@@ -515,14 +532,20 @@ export default function Navbar() {
                   key={link.name}
                   to={link.path}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
+                  className={`flex items-center justify-between px-4 py-2.5 rounded-full text-sm font-medium transition ${
                     isActive
-                      ? 'text-white bg-red-600/20 border border-red-500/30'
+                      ? 'text-zinc-950 bg-white font-bold shadow'
                       : 'text-zinc-200 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    {link.icon && <link.icon className={`w-4 h-4 ${isActive ? 'text-red-400' : 'text-zinc-400'}`} />}
+                    {link.icon && (
+                      <link.icon
+                        className={`w-4 h-4 ${
+                          isActive ? 'text-zinc-950' : link.isLive ? 'text-red-400' : 'text-zinc-400'
+                        }`}
+                      />
+                    )}
                     <span>{link.name}</span>
                   </div>
                   {link.isLive && (
@@ -532,7 +555,11 @@ export default function Navbar() {
                     </span>
                   )}
                   {link.count !== undefined && link.count > 0 && (
-                    <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-xs font-mono font-bold shadow-sm">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold ${
+                        isActive ? 'bg-zinc-950 text-white' : 'bg-red-600 text-white shadow-sm'
+                      }`}
+                    >
                       {link.count}
                     </span>
                   )}
@@ -546,13 +573,13 @@ export default function Navbar() {
                 setMobileMenuOpen(false);
                 openSupportModal();
               }}
-              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-amber-300 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 transition cursor-pointer mt-1"
+              className="w-full flex items-center justify-between px-4 py-2.5 rounded-full text-sm font-medium text-amber-300 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 transition cursor-pointer mt-1"
             >
               <div className="flex items-center gap-3">
                 <Heart className="w-4 h-4 text-red-400 fill-red-400" />
                 <span>Support Platform</span>
               </div>
-              <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full text-xs font-mono font-bold">
+              <span className="px-2.5 py-0.5 bg-amber-500/20 text-amber-300 rounded-full text-xs font-mono font-bold">
                 Tip ☕
               </span>
             </button>
