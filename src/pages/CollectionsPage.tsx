@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { Layers, Film, ArrowRight, Search, Sparkles, Compass } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Layers, Film, ArrowRight, ArrowLeft, Search, Sparkles, Compass } from 'lucide-react';
 import { FRANCHISES } from '../data/franchises';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useMetaTags } from '../hooks/useMetaTags';
 
 export default function CollectionsPage() {
+  const navigate = useNavigate();
   usePageTitle('Cinematic Universes & Franchise Collections');
 
   useMetaTags({
@@ -39,8 +40,29 @@ export default function CollectionsPage() {
     }, 0);
   }, []);
 
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pt-24 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-10">
+    <div className="min-h-screen bg-zinc-950 text-white pt-20 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
+      {/* Back Navigation Button */}
+      <div className="flex items-center gap-3 pt-2">
+        <button
+          type="button"
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-xs font-semibold text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 transition active:scale-95 cursor-pointer shadow-md shrink-0"
+          title="Go back"
+        >
+          <ArrowLeft className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+          <span>Back</span>
+        </button>
+      </div>
+
       {/* Header / Hero */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-zinc-900 via-zinc-900/90 to-red-950/40 border border-zinc-800/80 p-8 sm:p-12 shadow-2xl">
         <div className="absolute top-0 right-0 -mt-10 -mr-10 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />

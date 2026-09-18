@@ -9,6 +9,7 @@ import AdTipBanner from './components/AdTipBanner';
 import SupportModal, { openSupportModal } from './components/SupportModal';
 import InstallAppPrompt from './components/InstallAppPrompt';
 import OfflineIndicator from './components/OfflineIndicator';
+import ScrollToTopButton from './components/ScrollToTopButton';
 import HomePage from './pages/HomePage';
 import MoviesPage from './pages/MoviesPage';
 import SeriesPage from './pages/SeriesPage';
@@ -47,6 +48,9 @@ export default function App() {
 
                 {/* Pro-Tip Ad blocker guidance banner */}
                 <AdTipBanner />
+
+                {/* Floating Smooth Scroll to Top Button */}
+                <ScrollToTopButton />
 
                 {/* Main Routes */}
                 <main className="flex-1">

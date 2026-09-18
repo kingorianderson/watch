@@ -7,6 +7,7 @@ import {
   Bookmark,
   ChevronRight,
   ChevronLeft,
+  ArrowLeft,
   Share2,
   Check,
   Copy,
@@ -240,25 +241,46 @@ export default function WatchPage() {
   return (
     <div className="min-h-screen bg-zinc-950 text-white pt-20 pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        {/* Breadcrumb Navigation */}
-        <div className="flex items-center gap-2 text-xs sm:text-sm text-zinc-400 font-medium overflow-x-auto whitespace-nowrap py-1">
-          <Link to="/" className="hover:text-white transition">
-            Home
-          </Link>
-          <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-          <Link
-            to={mediaType === 'tv' ? '/series' : '/movies'}
-            className="hover:text-white transition capitalize"
+        {/* Navigation & Breadcrumb Header */}
+        <div className="flex items-center gap-3 py-1 overflow-x-auto whitespace-nowrap no-scrollbar">
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1);
+              } else {
+                navigate(mediaType === 'tv' ? '/series' : '/movies');
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-xs font-semibold text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 transition active:scale-95 cursor-pointer shadow-md shrink-0"
+            title="Go back"
           >
-            {mediaType === 'tv' ? 'TV Shows' : 'Movies'}
-          </Link>
-          <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-          <span className="text-zinc-200 truncate">{title}</span>
-          {mediaType === 'tv' && (
-            <span className="px-2 py-0.5 rounded bg-zinc-800 text-red-400 font-mono text-xs font-bold">
-              S{currentSeason} : E{currentEpisode}
-            </span>
-          )}
+            <ArrowLeft className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+            <span>Back</span>
+          </button>
+
+          <div className="h-4 w-px bg-zinc-800 shrink-0" />
+
+          {/* Breadcrumb Navigation */}
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-zinc-400 font-medium">
+            <Link to="/" className="hover:text-white transition">
+              Home
+            </Link>
+            <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+            <Link
+              to={mediaType === 'tv' ? '/series' : '/movies'}
+              className="hover:text-white transition capitalize"
+            >
+              {mediaType === 'tv' ? 'TV Shows' : 'Movies'}
+            </Link>
+            <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+            <span className="text-zinc-200 truncate">{title}</span>
+            {mediaType === 'tv' && (
+              <span className="px-2 py-0.5 rounded bg-zinc-800 text-red-400 font-mono text-xs font-bold">
+                S{currentSeason} : E{currentEpisode}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Video Player */}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Calendar,
   MapPin,
@@ -7,6 +7,7 @@ import {
   Tv,
   Award,
   ChevronRight,
+  ArrowLeft,
   ExternalLink,
   SlidersHorizontal,
   ChevronDown,
@@ -21,6 +22,7 @@ import { useMetaTags } from '../hooks/useMetaTags';
 
 export default function PersonPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [person, setPerson] = useState<PersonDetails | null>(null);
   const [credits, setCredits] = useState<PersonCombinedCredits | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -150,18 +152,41 @@ export default function PersonPage() {
   const currentYear = new Date().getFullYear();
   const age = birthYear ? (person.deathday ? new Date(person.deathday).getFullYear() - birthYear : currentYear - birthYear) : null;
 
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white pt-20 pb-28">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
-        {/* Breadcrumb Navigation */}
-        <div className="flex items-center gap-2 text-xs sm:text-sm text-zinc-400 font-medium overflow-x-auto whitespace-nowrap py-1">
-          <Link to="/" className="hover:text-white transition">
-            Home
-          </Link>
-          <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-          <span className="text-zinc-500">People</span>
-          <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
-          <span className="text-zinc-200 font-semibold truncate">{person.name}</span>
+        {/* Navigation & Breadcrumb Header */}
+        <div className="flex items-center gap-3 py-1 overflow-x-auto whitespace-nowrap no-scrollbar">
+          <button
+            type="button"
+            onClick={handleGoBack}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-xs font-semibold text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 transition active:scale-95 cursor-pointer shadow-md shrink-0"
+            title="Go back to previous page"
+          >
+            <ArrowLeft className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+            <span>Back</span>
+          </button>
+
+          <div className="h-4 w-px bg-zinc-800 shrink-0" />
+
+          {/* Breadcrumb Navigation */}
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-zinc-400 font-medium">
+            <Link to="/" className="hover:text-white transition">
+              Home
+            </Link>
+            <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+            <span className="text-zinc-500">People</span>
+            <ChevronRight className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+            <span className="text-zinc-200 font-semibold truncate">{person.name}</span>
+          </div>
         </div>
 
         {/* Hero Profile Section */}
