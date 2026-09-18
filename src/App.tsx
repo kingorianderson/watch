@@ -10,7 +10,7 @@ import AdTipBanner from './components/AdTipBanner';
 import SupportModal, { openSupportModal } from './components/SupportModal';
 import InstallAppPrompt from './components/InstallAppPrompt';
 import OfflineIndicator from './components/OfflineIndicator';
-import GlobalPipManager from './components/GlobalPipManager';
+import FloatingMiniplayer from './components/FloatingMiniplayer';
 import HomePage from './pages/HomePage';
 import MoviesPage from './pages/MoviesPage';
 import SeriesPage from './pages/SeriesPage';
@@ -65,8 +65,8 @@ export default function App() {
                     </Routes>
                   </main>
 
-                  {/* Global OS Picture-in-Picture Background Stream Manager */}
-                  <GlobalPipManager />
+                  {/* Floating Persistent In-App Miniplayer & OS PiP Manager */}
+                  <FloatingMiniplayer />
 
                   {/* Global Footer */}
                   <footer className="bg-zinc-950 border-t border-zinc-900 py-10 text-xs text-zinc-500 space-y-4">
