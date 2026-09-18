@@ -13,6 +13,7 @@ import {
   Copy,
   Zap,
   ExternalLink,
+  Layers,
 } from 'lucide-react';
 import { tmdbService, getProfileUrl, getPosterUrl, getBackdropUrl } from '../services/tmdb';
 import type { MediaItem, CastMember } from '../types/media';
@@ -43,6 +44,7 @@ export default function WatchPage() {
   const [details, setDetails] = useState<MediaItem | null>(null);
   const [cast, setCast] = useState<CastMember[]>([]);
   const [similar, setSimilar] = useState<MediaItem[]>([]);
+  const [collection, setCollection] = useState<{ name: string; parts: MediaItem[] } | null>(null);
   const [modalItem, setModalItem] = useState<MediaItem | null>(null);
   const [copied, setCopied] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -80,6 +82,27 @@ export default function WatchPage() {
           setDetails(detailData);
           setCast(castData);
           setSimilar(similarData);
+
+          // If movie is part of an official TMDB collection / franchise (e.g. John Wick, Harry Potter, Avengers)
+          if (detailData.belongs_to_collection?.id) {
+            tmdbService
+              .getCollectionDetails(detailData.belongs_to_collection.id)
+              .then((colData) => {
+                if (isMounted && colData?.parts && colData.parts.length > 1) {
+                  setCollection({
+                    name: colData.name,
+                    parts: colData.parts,
+                  });
+                } else if (isMounted) {
+                  setCollection(null);
+                }
+              })
+              .catch(() => {
+                if (isMounted) setCollection(null);
+              });
+          } else {
+            setCollection(null);
+          }
 
           // Get existing saved progress if any
           const savedProgress = getEpisodeProgress(
@@ -586,6 +609,16 @@ export default function WatchPage() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* Dynamic Franchise / Sequel Collection Shelf (if part of a movie series) */}
+        {collection && collection.parts.length > 1 && (
+          <MediaRow
+            title={`${collection.name} (Part of the Saga)`}
+            items={collection.parts}
+            icon={<Layers className="w-5 h-5 text-red-500" />}
+            onOpenDetails={(item) => setModalItem(item)}
+          />
         )}
 
         {/* Similar Titles Shelf */}

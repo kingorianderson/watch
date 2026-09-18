@@ -20,6 +20,12 @@ export interface MediaItem {
   seasons?: SeasonSummary[];
   status?: string;
   tagline?: string;
+  belongs_to_collection?: {
+    id: number;
+    name: string;
+    poster_path: string | null;
+    backdrop_path: string | null;
+  } | null;
 }
 
 export interface SeasonSummary {

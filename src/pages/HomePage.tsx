@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Flame, Film, Tv, Trophy, Zap, Rocket, Sparkles, Smile, Ghost, History, Play, CheckCircle2, Layers, ArrowRight } from 'lucide-react';
+import { Flame, Film, Tv, Trophy, Zap, Rocket, Sparkles, Smile, Ghost, History, Play, CheckCircle2 } from 'lucide-react';
 import { tmdbService, getPosterUrl } from '../services/tmdb';
-import { FRANCHISES } from '../data/franchises';
 import type { MediaItem } from '../types/media';
 import HeroBanner from '../components/HeroBanner';
 import MediaRow from '../components/MediaRow';
@@ -218,60 +217,6 @@ export default function HomePage() {
           icon={<Trophy className="w-5 h-5 text-yellow-500" />}
           onOpenDetails={(item) => setModalItem(item)}
         />
-
-        {/* Cinematic Universes & Franchises Shelf */}
-        <section className="px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Layers className="w-5 h-5 text-red-500" />
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-                Cinematic Universes &amp; Franchises
-              </h2>
-            </div>
-            <Link
-              to="/collections"
-              className="text-xs sm:text-sm font-semibold text-red-400 hover:text-red-300 flex items-center gap-1 transition group"
-            >
-              <span>View All ({FRANCHISES.length})</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-            </Link>
-          </div>
-
-          <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
-            {FRANCHISES.map((universe) => {
-              const totalItems = (universe.phases || []).reduce(
-                (sum, p) => sum + (p.items?.length || 0),
-                0
-              );
-              return (
-                <Link
-                  key={universe.id}
-                  to={`/collection/${universe.slug}`}
-                  className="w-72 sm:w-80 shrink-0 group relative rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800/90 hover:border-zinc-700 transition-all duration-300 hover:shadow-xl hover:shadow-red-600/10 hover:-translate-y-1"
-                >
-                  <div className="relative h-40 w-full overflow-hidden">
-                    <img
-                      src={universe.backdropUrl}
-                      alt={universe.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/60 to-transparent" />
-                    <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/70 backdrop-blur-md border border-white/10 text-white">
-                      {totalItems} Titles
-                    </span>
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <h3 className="text-base sm:text-lg font-black text-white group-hover:text-red-400 transition truncate">
-                        {universe.name}
-                      </h3>
-                      <p className="text-xs text-zinc-300 truncate">{universe.tagline}</p>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-
         <MediaRow
           title="High-Octane Action"
           items={actionMovies}

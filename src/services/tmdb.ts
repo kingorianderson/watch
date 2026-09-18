@@ -154,10 +154,26 @@ export const tmdbService = {
     };
   },
 
-  // Collection Details (TMDB Movie Collections)
-  getCollectionDetails: async (collectionId: number | string): Promise<any> => {
+  // Collection Details (TMDB Movie Collections / Franchises)
+  getCollectionDetails: async (
+    collectionId: number | string
+  ): Promise<{ id: number; name: string; overview: string; poster_path: string | null; backdrop_path: string | null; parts: MediaItem[] }> => {
     const res = await api.get(`/collection/${collectionId}`);
-    return res.data;
+    const parts: MediaItem[] = (res.data.parts || [])
+      .map((item: any) => ({
+        ...item,
+        media_type: 'movie',
+      }))
+      .sort((a: any, b: any) => {
+        const dateA = a.release_date || '';
+        const dateB = b.release_date || '';
+        return dateA.localeCompare(dateB);
+      });
+
+    return {
+      ...res.data,
+      parts,
+    };
   },
 
   // Videos / Trailers
