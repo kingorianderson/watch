@@ -60,6 +60,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const closePlayer = useCallback(() => {
+    if (typeof document !== 'undefined' && document.pictureInPictureElement) {
+      document.exitPictureInPicture().catch(() => {});
+    }
     setActiveMedia(null);
     setCurrentTime(0);
     setDuration(0);
@@ -67,6 +70,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const expandPlayer = useCallback(() => {
+    if (typeof document !== 'undefined' && document.pictureInPictureElement) {
+      document.exitPictureInPicture().catch(() => {});
+    }
+
     const current = activeMediaRef.current;
     if (!current) return;
 
