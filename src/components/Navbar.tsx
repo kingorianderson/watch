@@ -226,7 +226,7 @@ export default function Navbar() {
     <>
       <header className="fixed top-3 sm:top-5 inset-x-0 z-40 px-3 sm:px-6 lg:px-8 flex flex-col items-center pointer-events-none transition-all duration-300">
         <nav
-          className={`pointer-events-auto w-full max-w-7xl rounded-full transition-all duration-300 border shadow-2xl ${
+          className={`pointer-events-auto w-full max-w-[1550px] rounded-full transition-all duration-300 border shadow-2xl ${
             isScrolled
               ? 'bg-zinc-950/85 backdrop-blur-2xl border-white/20 shadow-black/90 ring-1 ring-white/10 py-2 sm:py-2.5 px-4 sm:px-6 lg:px-8'
               : 'bg-black/45 backdrop-blur-2xl border-white/15 shadow-black/70 ring-1 ring-white/10 py-2 sm:py-2.5 px-4 sm:px-6 lg:px-8'
