@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Star, Bookmark, Info, RotateCcw, Sparkles } from 'lucide-react';
-import { getPosterUrl, tmdbService } from '../services/tmdb';
+import { Play, Star, Bookmark, Info, RotateCcw } from 'lucide-react';
+import { getPosterUrl } from '../services/tmdb';
 import type { MediaItem } from '../types/media';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { useWatchHistory } from '../hooks/useWatchHistory';
@@ -17,12 +17,6 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
   const { toggleWatchlist, isInWatchlist } = useWatchlist();
   const { getLastWatched } = useWatchHistory();
   const isBookmarked = isInWatchlist(item.id);
-
-  const [trailerKey, setTrailerKey] = useState<string | null>(null);
-  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
-  const [previewLoaded, setPreviewLoaded] = useState(false);
-
-  const hoverTimerRef = useRef<number | null>(null);
 
   const title = item.title || item.name || 'Untitled';
   const rawDate = item.release_date || item.first_air_date || '';
@@ -52,37 +46,6 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
 
   const hasActiveResume = Boolean(lastWatched && !isCompleted && !isPreview && progressPercent > 5);
 
-  const handleMouseEnter = () => {
-    // Debounce hover trailer preview (1100ms) to avoid accidental rapid triggers
-    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    hoverTimerRef.current = window.setTimeout(async () => {
-      try {
-        const key = await tmdbService.getTrailerVideoKey(isTv ? 'tv' : 'movie', item.id);
-        if (key) {
-          setTrailerKey(key);
-          setIsPlayingPreview(true);
-        }
-      } catch {
-        // Fallback gracefully without preview
-      }
-    }, 1100);
-  };
-
-  const handleMouseLeave = () => {
-    if (hoverTimerRef.current) {
-      clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = null;
-    }
-    setIsPlayingPreview(false);
-    setPreviewLoaded(false);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    };
-  }, []);
-
   const handleBookmarkClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -99,41 +62,15 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
   };
 
   return (
-    <div
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      className="isolate group relative flex flex-col rounded-xl overflow-hidden bg-zinc-900/60 border border-zinc-800/80 transition-all duration-300 hover:scale-[1.04] hover:border-red-500/50 hover:shadow-2xl hover:shadow-red-950/30"
-    >
+    <div className="isolate group relative flex flex-col rounded-xl overflow-hidden bg-zinc-900/60 border border-zinc-800/80 transition-all duration-300 hover:scale-[1.04] hover:border-red-500/50 hover:shadow-2xl hover:shadow-red-950/30">
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-zinc-950">
         {/* Poster Image */}
         <img
           src={getPosterUrl(item.poster_path, 'w500')}
           alt={title}
           loading="lazy"
-          className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${
-            isPlayingPreview && previewLoaded ? 'opacity-0 pointer-events-none' : 'opacity-100'
-          }`}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
-
-        {/* Netflix-Style Muted Hover Video Preview */}
-        {isPlayingPreview && trailerKey && (
-          <div className="absolute inset-0 z-10 bg-black overflow-hidden pointer-events-none">
-            <iframe
-              src={`https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&modestbranding=1&loop=1&playlist=${trailerKey}&playsinline=1&enablejsapi=1&rel=0`}
-              title={`${title} Teaser Preview`}
-              onLoad={() => setPreviewLoaded(true)}
-              className={`w-full h-full object-cover transform scale-125 transition-opacity duration-500 ${
-                previewLoaded ? 'opacity-100' : 'opacity-0'
-              }`}
-              allow="autoplay; encrypted-media"
-            />
-            {/* Teaser Preview Badge */}
-            <div className="absolute bottom-2 right-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-950/80 backdrop-blur-md text-[10px] font-bold text-red-400 border border-red-500/30 shadow">
-              <Sparkles className="w-3 h-3" />
-              <span>Preview</span>
-            </div>
-          </div>
-        )}
 
         {/* Top Badges */}
         <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-20">
@@ -164,12 +101,10 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
         </div>
 
         {/* Rating Badge */}
-        {!isPlayingPreview && (
-          <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-950/80 backdrop-blur-md text-[11px] font-semibold text-amber-400 border border-amber-500/20 pointer-events-none">
-            <Star className="w-3 h-3 fill-amber-400" />
-            <span>{item.vote_average ? item.vote_average.toFixed(1) : 'NR'}</span>
-          </div>
-        )}
+        <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-950/80 backdrop-blur-md text-[11px] font-semibold text-amber-400 border border-amber-500/20 pointer-events-none">
+          <Star className="w-3 h-3 fill-amber-400" />
+          <span>{item.vote_average ? item.vote_average.toFixed(1) : 'NR'}</span>
+        </div>
 
         {/* Playback Progress Bar */}
         {isCompleted ? (
@@ -206,7 +141,7 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
               <Play className="w-6 h-6 fill-white ml-0.5" />
             )}
           </Link>
-          {onOpenDetails && (
+          {(onOpenDetails || onSelect) && (
             <button
               type="button"
               onClick={handleInfoClick}

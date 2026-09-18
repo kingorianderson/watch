@@ -60,3 +60,4 @@ export function useMetaTags(options: MetaTagOptions) {
     updateMetaTag('meta[name="twitter:url"]', 'content', currentUrl);
   }, [options.title, options.description, options.image, options.url, options.type, options.siteName]);
 }
+
