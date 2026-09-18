@@ -7,8 +7,8 @@ export const FRANCHISES: FranchiseUniverse[] = [
     name: 'Marvel Cinematic Universe',
     tagline: 'The Infinity Saga & The Multiverse Saga in Story Order',
     description: 'Experience Earth’s Mightiest Heroes across all phases, from the birth of Captain America in WWII to the multiverse incursions.',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/mDfJG3LC3Dqb67AZ52x3Z0jQ0eB.jpg',
-    posterUrl: 'https://image.tmdb.org/t/p/w780/or06FN3Dka5tukK1e9sl16pB3iy.jpg',
+    backdropUrl: 'https://image.tmdb.org/t/p/w1280/7RyHsO4yDXtBv1zUU3mTpHeQ0d5.jpg',
+    posterUrl: 'https://image.tmdb.org/t/p/w780/ulzhLuWrPK07P1YkdWQLZnQh1JL.jpg',
     accentColor: '#e50914',
     phases: [
       {
@@ -76,8 +76,8 @@ export const FRANCHISES: FranchiseUniverse[] = [
     name: 'Star Wars: The Skywalker Saga',
     tagline: 'From the fall of the Republic to the Rise of Skywalker',
     description: 'Witness the complete canon timeline in chronological order across the Prequels, Spin-offs, Original Trilogy, and Sequels.',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/zqkmTXzjkAgMf7DaAY9wP2GeAnC.jpg',
-    posterUrl: 'https://image.tmdb.org/t/p/w780/6FfCtAuVAW8XJjZ7eWeLibRLWTw.jpg',
+    backdropUrl: 'https://image.tmdb.org/t/p/w1280/5Iw7zQTHVRBOYpA0V6z0yypOPZh.jpg',
+    posterUrl: 'https://image.tmdb.org/t/p/w780/kOVEVeg59E0wsnXmF9nrh6OmWII.jpg',
     accentColor: '#3b82f6',
     phases: [
       {
@@ -123,8 +123,8 @@ export const FRANCHISES: FranchiseUniverse[] = [
     name: 'Wizarding World of Harry Potter',
     tagline: 'From Grindelwald’s uprising to the Battle of Hogwarts',
     description: 'The magic begins with Newt Scamander in 1920s New York and culminates in Harry Potter’s epic duel with Lord Voldemort.',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/5rrGVmRUpt0Fi7tL05yt64f69T1.jpg',
-    posterUrl: 'https://image.tmdb.org/t/p/w780/wuMc08IPKEatf9rnMNXvIDxqP4W.jpg',
+    backdropUrl: 'https://image.tmdb.org/t/p/w1280/eKUk4oN4ucwnLJml7wRnjuB9AQH.jpg',
+    posterUrl: 'https://image.tmdb.org/t/p/w780/c54HpQmuwXjHq2C9wmoACjxoom3.jpg',
     accentColor: '#f59e0b',
     phases: [
       {
@@ -158,7 +158,7 @@ export const FRANCHISES: FranchiseUniverse[] = [
     name: 'The Dark Knight & Gotham Universe',
     tagline: 'Christopher Nolan’s Legendary Trilogy & Matt Reeves’ Detective Noir',
     description: 'Gotham’s greatest protector faces the Joker, Bane, and the Riddler in the most acclaimed comic book adaptations ever made.',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/nMKdUUepR0i5zn0y1T4CsSB5chy.jpg',
+    backdropUrl: 'https://image.tmdb.org/t/p/w1280/9FE5eD92WfVCiivM9Pq9GVSrlWk.jpg',
     posterUrl: 'https://image.tmdb.org/t/p/w780/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
     accentColor: '#9333ea',
     phases: [
@@ -186,8 +186,8 @@ export const FRANCHISES: FranchiseUniverse[] = [
     name: 'The Lord of the Rings & Middle-earth',
     tagline: 'One Ring to Rule Them All',
     description: 'Peter Jackson’s multi-Oscar winning epic saga following Bilbo and Frodo Baggins across the treacherous lands of Middle-earth.',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/vRQnzOn4H1073jiArOke4ke3mF5.jpg',
-    posterUrl: 'https://image.tmdb.org/t/p/w780/6oom5QYQ2yQTMJIbnvbkBL9cDK6.jpg',
+    backdropUrl: 'https://image.tmdb.org/t/p/w1280/ctiw6FZK4N36LmkjSklWEbuvlq9.jpg',
+    posterUrl: 'https://image.tmdb.org/t/p/w780/rCzpDGLbOoPwLjy3OAm5NUPOTrC.jpg',
     accentColor: '#10b981',
     phases: [
       {
@@ -216,8 +216,8 @@ export const FRANCHISES: FranchiseUniverse[] = [
     name: 'The Fast & Furious Saga',
     tagline: 'It’s All About Family',
     description: 'From street racing in Los Angeles to international high-stakes espionage and global heists in chronological story order.',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/4XM8DUTQb3lhLemJC51fOX00Z0r.jpg',
-    posterUrl: 'https://image.tmdb.org/t/p/w780/fiVW06jE7z9YnO4trhaMEdclSiC.jpg',
+    backdropUrl: 'https://image.tmdb.org/t/p/w1280/ehzI1mVcnHqB58NqPyQwpMqcVoz.jpg',
+    posterUrl: 'https://image.tmdb.org/t/p/w780/ktofZ9Htrjiy0P6LEowsDaxd3Ri.jpg',
     accentColor: '#f97316',
     phases: [
       {
@@ -245,8 +245,8 @@ export const FRANCHISES: FranchiseUniverse[] = [
     name: 'Spider-Man Multiverse',
     tagline: 'With Great Power Comes Great Responsibility',
     description: 'Explore every iteration of the web-slinger: Tobey Maguire, Andrew Garfield, Tom Holland, and the animated Spider-Verse.',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/14QbnygCuTO0vl7CAFmPf1fgZfV.jpg',
-    posterUrl: 'https://image.tmdb.org/t/p/w780/8Vt6mWEReuy4Of61Lnj5Xj704m8.jpg',
+    backdropUrl: 'https://image.tmdb.org/t/p/w1280/iQFcwSGbZXMkeyKrxbPnwnRo5fl.jpg',
+    posterUrl: 'https://image.tmdb.org/t/p/w780/1g0dhYtq4irTY1GPXvft6k4YLjm.jpg',
     accentColor: '#ef4444',
     phases: [
       {
@@ -282,8 +282,8 @@ export const FRANCHISES: FranchiseUniverse[] = [
     name: 'John Wick: The Continental Universe',
     tagline: 'Yeah, I’m Thinking I’m Back',
     description: 'Keanu Reeves stars as the legendary assassin fighting for his freedom against the High Table.',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/7I6VUdPj6tQECNHdviJkUHD2389.jpg',
-    posterUrl: 'https://image.tmdb.org/t/p/w780/fZPSMVcKrrZqJwP2i0L0jwBYmro.jpg',
+    backdropUrl: 'https://image.tmdb.org/t/p/w1280/7I6VUdPj6tQECNHdviJkUHD2u89.jpg',
+    posterUrl: 'https://image.tmdb.org/t/p/w780/vZloFAK7NmvMGKE7VkF5UHaz0I.jpg',
     accentColor: '#06b6d4',
     phases: [
       {
@@ -304,8 +304,8 @@ export const FRANCHISES: FranchiseUniverse[] = [
     name: 'The MonsterVerse (Titans & Hollow Earth)',
     tagline: 'Let Them Fight',
     description: 'Godzilla, Kong, and ancient Titans collide for supremacy on surface Earth and inside the Hollow Earth.',
-    backdropUrl: 'https://image.tmdb.org/t/p/original/7nrAl9iT56lY5E22z7g5G106rB.jpg',
-    posterUrl: 'https://image.tmdb.org/t/p/w780/tMefBSflR6PGQLv7WvFPpKLZkyk.jpg',
+    backdropUrl: 'https://image.tmdb.org/t/p/w1280/gvLG3Fnznkxl4SmYfcK8gUuqxM8.jpg',
+    posterUrl: 'https://image.tmdb.org/t/p/w780/z1p34vh7dEOnLDmyCrlUVLuoDzd.jpg',
     accentColor: '#14b8a6',
     phases: [
       {
