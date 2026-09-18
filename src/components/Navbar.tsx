@@ -215,9 +215,7 @@ export default function Navbar() {
   };
 
   const navLinks = [
-    { name: 'Live Sports', path: '/sports', icon: Trophy, isLive: true },
     { name: 'Movies', path: '/movies', icon: Film },
-    { name: 'TV Series', path: '/series', icon: Tv },
     { name: 'Shows', path: '/series', icon: Tv },
     { name: 'Watchlist', path: '/watchlist', icon: Bookmark, count: watchlist.length },
     { name: 'Live Sports', path: '/sports', icon: Trophy, isLive: true },
