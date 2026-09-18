@@ -13,7 +13,7 @@ import {
   Zap,
   ExternalLink,
 } from 'lucide-react';
-import { tmdbService, getProfileUrl } from '../services/tmdb';
+import { tmdbService, getProfileUrl, getPosterUrl, getBackdropUrl } from '../services/tmdb';
 import type { MediaItem, CastMember } from '../types/media';
 import VideoPlayer from '../components/VideoPlayer';
 import EpisodePicker from '../components/EpisodePicker';
@@ -22,6 +22,7 @@ import MediaDetailsModal from '../components/MediaDetailsModal';
 import { useWatchHistory } from '../hooks/useWatchHistory';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { useMetaTags } from '../hooks/useMetaTags';
 
 export default function WatchPage() {
   const { type, id, season, episode } = useParams<{
@@ -156,6 +157,18 @@ export default function WatchPage() {
         : `${title} (${year || 'Movie'})`
       : 'Watch'
   );
+
+  useMetaTags({
+    title: details
+      ? mediaType === 'tv'
+        ? `${title} (S${currentSeason} E${currentEpisode})`
+        : `${title} (${year || 'Movie'})`
+      : 'Watch',
+    description: details?.overview || 'Stream movies and TV series in HD with instant playback on WATCHD.',
+    image: details?.poster_path ? getPosterUrl(details.poster_path, 'w780') : details?.backdrop_path ? getBackdropUrl(details.backdrop_path, 'w1280') : undefined,
+    url: window.location.href,
+    type: mediaType === 'tv' ? 'video.tv_show' : 'video.movie',
+  });
 
   const handlePrevEpisode = () => {
     if (currentEpisode > 1) {
@@ -410,35 +423,103 @@ export default function WatchPage() {
           </div>
         )}
 
-        {/* Share Modal Dialog */}
+        {/* Rich Share Modal Dialog */}
         {showShareModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-              <h3 className="text-lg font-bold text-white">Share This Stream</h3>
-              <p className="text-xs text-zinc-400">
-                Copy the link below to invite friends to watch this title in HD with you:
-              </p>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-lg w-full space-y-5 shadow-2xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Share2 className="w-5 h-5 text-red-500" />
+                  <span>Share Stream</span>
+                </h3>
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Live OpenGraph Social Preview Card */}
+              <div className="rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-inner">
+                <div className="relative h-32 w-full bg-zinc-900 overflow-hidden">
+                  <img
+                    src={
+                      details?.backdrop_path
+                        ? getBackdropUrl(details.backdrop_path, 'w780')
+                        : details?.poster_path
+                        ? getPosterUrl(details.poster_path, 'w500')
+                        : 'https://watch.kingori.co.ke/favicon.svg'
+                    }
+                    alt={title}
+                    className="w-full h-full object-cover object-center filter brightness-90"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent" />
+                  <span className="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white uppercase tracking-wider">
+                    WATCHD HD
+                  </span>
+                </div>
+                <div className="p-3 space-y-1">
+                  <p className="text-xs font-mono text-zinc-500 uppercase tracking-wider">
+                    watch.kingori.co.ke
+                  </p>
+                  <h4 className="text-sm font-bold text-white line-clamp-1">{title}</h4>
+                  <p className="text-xs text-zinc-400 line-clamp-2">
+                    {details?.overview || 'Stream this title in HD with instant playback and subtitles.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Social Channels 1-Click Buttons */}
+              <div className="grid grid-cols-3 gap-2">
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                    `🍿 Watch "${title}" in HD on WATCHD:\n${window.location.href}`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-400 font-semibold text-xs flex items-center justify-center gap-1.5 transition text-center"
+                >
+                  <span>WhatsApp</span>
+                </a>
+                <a
+                  href={`https://t.me/share/url?url=${encodeURIComponent(
+                    window.location.href
+                  )}&text=${encodeURIComponent(`🍿 Watch "${title}" in HD on WATCHD`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2.5 rounded-xl bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-400 font-semibold text-xs flex items-center justify-center gap-1.5 transition text-center"
+                >
+                  <span>Telegram</span>
+                </a>
+                <a
+                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
+                    `🍿 Watching "${title}" in HD on @WATCHD`
+                  )}&url=${encodeURIComponent(window.location.href)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition text-center"
+                >
+                  <span>X / Twitter</span>
+                </a>
+              </div>
+
+              {/* Direct Copy Link Input */}
               <div className="flex items-center gap-2 bg-zinc-950 p-2 rounded-xl border border-zinc-800">
                 <input
                   type="text"
                   readOnly
                   value={window.location.href}
-                  className="bg-transparent text-xs text-zinc-300 flex-1 outline-none font-mono"
+                  className="bg-transparent text-xs text-zinc-300 flex-1 outline-none font-mono px-1"
                 />
                 <button
                   onClick={handleCopyLink}
-                  className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shrink-0"
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? 'Copied!' : 'Copy'}</span>
+                  <span>{copied ? 'Copied!' : 'Copy Link'}</span>
                 </button>
               </div>
-              <button
-                onClick={() => setShowShareModal(false)}
-                className="w-full py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition cursor-pointer"
-              >
-                Close
-              </button>
             </div>
           </div>
         )}
@@ -462,8 +543,12 @@ export default function WatchPage() {
             </h3>
             <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
               {cast.map((c) => (
-                <div key={c.id} className="w-24 sm:w-28 shrink-0 text-center space-y-1.5">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-full overflow-hidden bg-zinc-800 border-2 border-zinc-700/60 shadow-md">
+                <Link
+                  key={c.id}
+                  to={`/person/${c.id}`}
+                  className="w-24 sm:w-28 shrink-0 text-center space-y-1.5 group cursor-pointer"
+                >
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-full overflow-hidden bg-zinc-800 border-2 border-zinc-700/60 shadow-md transition-all duration-200 group-hover:scale-105 group-hover:border-red-500">
                     <img
                       src={getProfileUrl(c.profile_path)}
                       alt={c.name}
@@ -471,9 +556,11 @@ export default function WatchPage() {
                       loading="lazy"
                     />
                   </div>
-                  <h4 className="text-xs font-semibold text-zinc-200 line-clamp-1">{c.name}</h4>
+                  <h4 className="text-xs font-semibold text-zinc-200 group-hover:text-red-400 transition-colors line-clamp-1">
+                    {c.name}
+                  </h4>
                   <p className="text-[11px] text-zinc-500 line-clamp-1">{c.character}</p>
-                </div>
+                </Link>
               ))}
             </div>
           </div>

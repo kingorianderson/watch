@@ -16,6 +16,9 @@ import ExplorePage from './pages/ExplorePage';
 import SportsPage from './pages/SportsPage';
 import WatchPage from './pages/WatchPage';
 import WatchlistPage from './pages/WatchlistPage';
+import PersonPage from './pages/PersonPage';
+import CollectionsPage from './pages/CollectionsPage';
+import CollectionDetailPage from './pages/CollectionDetailPage';
 import TermsPage from './pages/TermsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -53,6 +56,10 @@ export default function App() {
                     <Route path="/movies" element={<MoviesPage />} />
                     <Route path="/series" element={<SeriesPage />} />
                     <Route path="/explore" element={<ExplorePage />} />
+                    <Route path="/collections" element={<CollectionsPage />} />
+                    <Route path="/universes" element={<CollectionsPage />} />
+                    <Route path="/collection/:id" element={<CollectionDetailPage />} />
+                    <Route path="/person/:id" element={<PersonPage />} />
                     <Route path="/watch/:type/:id" element={<WatchPage />} />
                     <Route path="/watch/:type/:id/:season/:episode" element={<WatchPage />} />
                     <Route path="/watchlist" element={<WatchlistPage />} />

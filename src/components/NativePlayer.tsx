@@ -1139,17 +1139,23 @@ export default function NativePlayer({
           break;
         }
         case '>':
-          if (e.shiftKey) {
+        case '.':
+          if (e.shiftKey || e.key === '>') {
+            e.preventDefault();
             const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
             const next = speeds.find((s) => s > playbackSpeedRef.current) || 2;
             handleSpeedChange(next);
+            showNetworkToast(`⚡ Speed: ${next}x`);
           }
           break;
         case '<':
-          if (e.shiftKey) {
+        case ',':
+          if (e.shiftKey || e.key === '<') {
+            e.preventDefault();
             const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
             const prev = [...speeds].reverse().find((s) => s < playbackSpeedRef.current) || 0.25;
             handleSpeedChange(prev);
+            showNetworkToast(`⚡ Speed: ${prev}x`);
           }
           break;
         case '0':

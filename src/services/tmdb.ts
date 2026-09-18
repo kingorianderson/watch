@@ -1,5 +1,12 @@
 import axios from 'axios';
-import type { MediaItem, Episode, CastMember, VideoTrailer } from '../types/media';
+import type {
+  MediaItem,
+  Episode,
+  CastMember,
+  VideoTrailer,
+  PersonDetails,
+  PersonCombinedCredits,
+} from '../types/media';
 
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY || 'e72a65315316bb3693595b379ad9c1f5';
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -10,7 +17,7 @@ export const getPosterUrl = (path: string | null, size = 'w500') =>
 export const getBackdropUrl = (path: string | null, size = 'original') =>
   path ? `${IMAGE_BASE_URL}/${size}${path}` : 'https://placehold.co/1920x1080/18181b/ffffff?text=No+Backdrop';
 export const getProfileUrl = (path: string | null) =>
-  path ? `${IMAGE_BASE_URL}/w185${path}` : 'https://placehold.co/185x278/18181b/ffffff?text=No+Image';
+  path ? `${IMAGE_BASE_URL}/h632${path}` : 'https://placehold.co/185x278/18181b/ffffff?text=No+Image';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -48,6 +55,9 @@ export const GENRE_MAP: Record<number, string> = {
   10767: 'Talk',
   10768: 'War & Politics',
 };
+
+// In-memory trailer cache to avoid redundant network calls on card hover
+const trailerCache = new Map<string, string | null>();
 
 export const tmdbService = {
   // Trending
@@ -115,10 +125,72 @@ export const tmdbService = {
     return (res.data.cast || []).slice(0, 15);
   },
 
+  // Person / Actor Details
+  getPersonDetails: async (personId: number | string): Promise<PersonDetails> => {
+    const res = await api.get(`/person/${personId}`);
+    return res.data;
+  },
+
+  // Person Filmography & Combined Credits (Movies & TV shows)
+  getPersonCombinedCredits: async (personId: number | string): Promise<PersonCombinedCredits> => {
+    const res = await api.get(`/person/${personId}/combined_credits`);
+    const cast = (res.data.cast || [])
+      .filter((item: any) => item.poster_path || item.backdrop_path)
+      .map((item: any) => ({
+        ...item,
+        media_type: item.media_type || (item.first_air_date ? 'tv' : 'movie'),
+      }));
+    const crew = (res.data.crew || [])
+      .filter((item: any) => item.poster_path || item.backdrop_path)
+      .map((item: any) => ({
+        ...item,
+        media_type: item.media_type || (item.first_air_date ? 'tv' : 'movie'),
+      }));
+
+    return {
+      id: res.data.id,
+      cast,
+      crew,
+    };
+  },
+
+  // Collection Details (TMDB Movie Collections)
+  getCollectionDetails: async (collectionId: number | string): Promise<any> => {
+    const res = await api.get(`/collection/${collectionId}`);
+    return res.data;
+  },
+
   // Videos / Trailers
   getVideos: async (type: 'movie' | 'tv', id: number | string): Promise<VideoTrailer[]> => {
     const res = await api.get(`/${type}/${id}/videos`);
     return res.data.results || [];
+  },
+
+  // Fast Trailer Video Key Resolver for Hover Previews
+  getTrailerVideoKey: async (type: 'movie' | 'tv', id: number | string): Promise<string | null> => {
+    const cacheKey = `${type}_${id}`;
+    if (trailerCache.has(cacheKey)) {
+      return trailerCache.get(cacheKey) || null;
+    }
+
+    try {
+      const res = await api.get(`/${type}/${id}/videos`);
+      const videos: VideoTrailer[] = res.data.results || [];
+
+      // Prioritize Official Trailer -> Teaser -> Clip on YouTube
+      const trailer =
+        videos.find((v) => v.site === 'YouTube' && v.type === 'Trailer' && v.official) ||
+        videos.find((v) => v.site === 'YouTube' && v.type === 'Trailer') ||
+        videos.find((v) => v.site === 'YouTube' && v.type === 'Teaser') ||
+        videos.find((v) => v.site === 'YouTube');
+
+      const key = trailer ? trailer.key : null;
+      trailerCache.set(cacheKey, key);
+      return key;
+    } catch {
+      trailerCache.set(cacheKey, null);
+      return null;
+    }
   },
 
   // Recommendations / Similar
@@ -132,7 +204,7 @@ export const tmdbService = {
     if (!query.trim()) return [];
     const res = await api.get('/search/multi', { params: { query, page } });
     return (res.data.results || [])
-      .filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv')
+      .filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv' || item.media_type === 'person')
       .map((item: any) => ({ ...item, media_type: item.media_type }));
   },
 

@@ -85,3 +85,49 @@ export interface WatchlistItem {
   added_at: number;
 }
 
+export interface PersonDetails {
+  id: number;
+  name: string;
+  biography: string;
+  birthday: string | null;
+  deathday: string | null;
+  place_of_birth: string | null;
+  profile_path: string | null;
+  known_for_department: string;
+  popularity: number;
+  also_known_as?: string[];
+  imdb_id?: string;
+  homepage?: string | null;
+}
+
+export interface PersonCombinedCredits {
+  id: number;
+  cast: (MediaItem & { character?: string; episode_count?: number })[];
+  crew: (MediaItem & { job?: string; department?: string })[];
+}
+
+export interface FranchiseUniverse {
+  id: string;
+  slug: string;
+  name: string;
+  tagline: string;
+  description: string;
+  backdropUrl: string;
+  posterUrl: string;
+  accentColor?: string;
+  tmdbCollectionId?: number;
+  phases?: {
+    phaseTitle: string;
+    description?: string;
+    items: {
+      tmdbId: number;
+      type: 'movie' | 'tv';
+      title: string;
+      year: number;
+      order: number;
+      chronologicalNote?: string;
+    }[];
+  }[];
+}
+
+

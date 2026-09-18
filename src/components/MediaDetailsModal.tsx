@@ -242,15 +242,22 @@ export default function MediaDetailsModal({ item, onClose }: MediaDetailsModalPr
                 </h3>
                 <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
                   {cast.map((actor) => (
-                    <div key={actor.id} className="w-20 shrink-0 text-center space-y-1">
+                    <Link
+                      key={actor.id}
+                      to={`/person/${actor.id}`}
+                      onClick={onClose}
+                      className="w-20 shrink-0 text-center space-y-1 group transition cursor-pointer"
+                    >
                       <img
                         src={getProfileUrl(actor.profile_path)}
                         alt={actor.name}
-                        className="w-16 h-16 rounded-full object-cover mx-auto bg-zinc-800 border border-zinc-700"
+                        className="w-16 h-16 rounded-full object-cover mx-auto bg-zinc-800 border border-zinc-700 group-hover:border-red-500 group-hover:scale-105 transition duration-200"
                       />
-                      <p className="text-xs font-semibold text-zinc-200 truncate">{actor.name}</p>
+                      <p className="text-xs font-semibold text-zinc-200 group-hover:text-red-400 transition truncate">
+                        {actor.name}
+                      </p>
                       <p className="text-[11px] text-zinc-500 truncate">{actor.character}</p>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </div>
