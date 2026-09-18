@@ -224,19 +224,19 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="fixed top-3 sm:top-5 inset-x-0 z-40 px-3 sm:px-6 flex flex-col items-center pointer-events-none transition-all duration-300">
+      <header className="fixed top-3 sm:top-5 inset-x-0 z-40 px-3 sm:px-6 lg:px-8 flex flex-col items-center pointer-events-none transition-all duration-300">
         <nav
-          className={`pointer-events-auto w-full max-w-5xl lg:max-w-6xl rounded-full transition-all duration-300 border shadow-2xl ${
+          className={`pointer-events-auto w-full max-w-7xl rounded-full transition-all duration-300 border shadow-2xl ${
             isScrolled
-              ? 'bg-zinc-950/85 backdrop-blur-2xl border-white/20 shadow-black/90 ring-1 ring-white/10 py-1.5 sm:py-2 px-3 sm:px-4'
-              : 'bg-black/40 backdrop-blur-2xl border-white/15 shadow-black/70 ring-1 ring-white/10 py-1.5 sm:py-2 px-3 sm:px-4'
-          } flex items-center justify-between gap-2 sm:gap-4`}
+              ? 'bg-zinc-950/85 backdrop-blur-2xl border-white/20 shadow-black/90 ring-1 ring-white/10 py-2 sm:py-2.5 px-4 sm:px-6 lg:px-8'
+              : 'bg-black/45 backdrop-blur-2xl border-white/15 shadow-black/70 ring-1 ring-white/10 py-2 sm:py-2.5 px-4 sm:px-6 lg:px-8'
+          } flex items-center justify-between gap-3 sm:gap-6`}
         >
           {/* Brand Logo */}
-          <div className="flex items-center gap-3 sm:gap-6 lg:gap-8">
-            <Link to="/" className="flex items-center gap-2 group shrink-0 pl-1">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 flex items-center justify-center shadow-md shadow-red-600/30 group-hover:scale-105 transition duration-200">
-                <Play className="w-3.5 h-3.5 text-white fill-white ml-0.5" />
+          <div className="flex items-center gap-4 sm:gap-6 lg:gap-8">
+            <Link to="/" className="flex items-center gap-2.5 group shrink-0 pl-1">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 flex items-center justify-center shadow-md shadow-red-600/30 group-hover:scale-105 transition duration-200">
+                <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white fill-white ml-0.5" />
               </div>
               <span className="text-lg sm:text-xl font-black tracking-tight text-white drop-shadow-md flex items-center">
                 WATC<span className="text-red-500 font-bold ml-0.5">HD</span>
@@ -244,7 +244,7 @@ export default function Navbar() {
             </Link>
 
             {/* Desktop Navigation Links */}
-            <div className="hidden md:flex items-center gap-1">
+            <div className="hidden md:flex items-center gap-1.5">
               {navLinks.map((link) => {
                 const isActive = location.pathname === link.path;
                 return (
@@ -301,17 +301,17 @@ export default function Navbar() {
           </div>
 
           {/* Desktop Search Bar & User Actions */}
-          <div className="flex items-center gap-2 sm:gap-2.5 flex-1 justify-end max-w-sm sm:max-w-md">
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 justify-end max-w-sm sm:max-w-md lg:max-w-lg">
             {/* Subtle vertical divider */}
             <div className="h-5 w-px bg-white/15 hidden md:block mr-1" />
 
-            {/* Desktop-only Compact Search Bar */}
-            <div className="relative hidden md:block w-36 lg:w-56" ref={searchRef}>
+            {/* Desktop-only Search Bar */}
+            <div className="relative hidden md:block w-44 md:w-56 lg:w-72" ref={searchRef}>
               <form onSubmit={handleSearchSubmit} className="relative">
                 <input
                   ref={desktopInputRef}
                   type="text"
-                  placeholder="Search..."
+                  placeholder="Search movies, series, actors..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setShowSearchDropdown(true)}
@@ -524,7 +524,7 @@ export default function Navbar() {
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="pointer-events-auto md:hidden mt-2 w-full max-w-md bg-zinc-950/95 backdrop-blur-2xl border border-white/15 rounded-3xl p-3 space-y-1.5 shadow-2xl shadow-black/90 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="pointer-events-auto md:hidden mt-2 w-full max-w-7xl bg-zinc-950/95 backdrop-blur-2xl border border-white/15 rounded-3xl p-3 space-y-1.5 shadow-2xl shadow-black/90 animate-in fade-in slide-in-from-top-2 duration-150">
             {navLinks.map((link) => {
               const isActive = location.pathname === link.path;
               return (
