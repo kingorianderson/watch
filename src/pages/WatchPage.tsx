@@ -22,7 +22,6 @@ import MediaDetailsModal from '../components/MediaDetailsModal';
 import { useWatchHistory } from '../hooks/useWatchHistory';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { usePageTitle } from '../hooks/usePageTitle';
-import { usePlayer } from '../context/PlayerContext';
 
 export default function WatchPage() {
   const { type, id, season, episode } = useParams<{
@@ -34,7 +33,6 @@ export default function WatchPage() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { playMedia, updatePlayback } = usePlayer();
 
   const mediaType = type === 'tv' ? 'tv' : 'movie';
   const currentSeason = Number(season) || 1;
@@ -226,23 +224,6 @@ export default function WatchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, mediaType, currentSeason, currentEpisode, location.state]);
 
-  // Sync active media into PlayerContext for seamless floating miniplayer docking
-  useEffect(() => {
-    if (!id || !details) return;
-
-    playMedia({
-      id: Number(id),
-      type: mediaType,
-      title: details.title || details.name || 'Stream',
-      posterPath: details.poster_path || undefined,
-      backdropPath: details.backdrop_path || undefined,
-      season: mediaType === 'tv' ? currentSeason : undefined,
-      episode: mediaType === 'tv' ? currentEpisode : undefined,
-      releaseYear: year ? Number(year) : undefined,
-      startAt: initialStartAt,
-    });
-  }, [id, mediaType, currentSeason, currentEpisode, details, year, initialStartAt, playMedia]);
-
   return (
     <div className="min-h-screen bg-zinc-950 text-white pt-20 pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
@@ -278,7 +259,6 @@ export default function WatchPage() {
           startAt={initialStartAt}
           onProgressUpdate={(prog, dur) => {
             updateProgress(Number(id), mediaType, prog, dur, currentSeason, currentEpisode);
-            updatePlayback(prog, dur, true);
           }}
           nextEpisodeInfo={nextEpisodeInfo}
           onPlayNextEpisode={handleNextEpisode}
