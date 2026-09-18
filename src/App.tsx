@@ -5,7 +5,6 @@ import { WatchHistoryProvider } from './context/WatchHistoryContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Navbar from './components/Navbar';
 import AuthModal from './components/AuthModal';
-import AdTipBanner from './components/AdTipBanner';
 import SupportModal, { openSupportModal } from './components/SupportModal';
 import InstallAppPrompt from './components/InstallAppPrompt';
 import OfflineIndicator from './components/OfflineIndicator';
@@ -45,9 +44,6 @@ export default function App() {
 
                 {/* Smart Mobile PWA Install App Prompt Banner */}
                 <InstallAppPrompt />
-
-                {/* Pro-Tip Ad blocker guidance banner */}
-                <AdTipBanner />
 
                 {/* Floating Smooth Scroll to Top Button */}
                 <ScrollToTopButton />

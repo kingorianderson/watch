@@ -228,8 +228,8 @@ export default function Navbar() {
         <nav
           className={`pointer-events-auto w-full max-w-[1550px] rounded-full transition-all duration-300 border shadow-2xl ${
             isScrolled
-              ? 'bg-zinc-950/85 backdrop-blur-2xl border-white/20 shadow-black/90 ring-1 ring-white/10 py-2 sm:py-2.5 px-4 sm:px-6 lg:px-8'
-              : 'bg-black/45 backdrop-blur-2xl border-white/15 shadow-black/70 ring-1 ring-white/10 py-2 sm:py-2.5 px-4 sm:px-6 lg:px-8'
+              ? 'bg-zinc-950/85 backdrop-blur-2xl border-white/20 shadow-black/90 ring-1 ring-white/10 py-2 sm:py-2.5 pl-4 sm:pl-6 pr-6 sm:pr-8'
+              : 'bg-black/45 backdrop-blur-2xl border-white/15 shadow-black/70 ring-1 ring-white/10 py-2 sm:py-2.5 pl-4 sm:pl-6 pr-6 sm:pr-8'
           } flex items-center justify-between gap-3 sm:gap-6`}
         >
           {/* Brand Logo */}
@@ -301,12 +301,12 @@ export default function Navbar() {
           </div>
 
           {/* Desktop Search Bar & User Actions */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-1 justify-end max-w-sm sm:max-w-md lg:max-w-lg">
+          <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
             {/* Subtle vertical divider */}
-            <div className="h-5 w-px bg-white/15 hidden md:block mr-1" />
+            <div className="h-5 w-px bg-white/15 hidden md:block mr-0.5" />
 
             {/* Desktop-only Search Bar */}
-            <div className="relative hidden md:block w-44 md:w-56 lg:w-72" ref={searchRef}>
+            <div className="relative hidden md:block w-40 md:w-52 lg:w-64" ref={searchRef}>
               <form onSubmit={handleSearchSubmit} className="relative">
                 <input
                   ref={desktopInputRef}
