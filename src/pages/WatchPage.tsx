@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Star,
   Calendar,
@@ -22,6 +22,7 @@ import MediaDetailsModal from '../components/MediaDetailsModal';
 import { useWatchHistory } from '../hooks/useWatchHistory';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { usePlayer } from '../context/PlayerContext';
 
 export default function WatchPage() {
   const { type, id, season, episode } = useParams<{
@@ -32,6 +33,9 @@ export default function WatchPage() {
   }>();
 
   const navigate = useNavigate();
+  const location = useLocation();
+  const { playMedia, updatePlayback } = usePlayer();
+
   const mediaType = type === 'tv' ? 'tv' : 'movie';
   const currentSeason = Number(season) || 1;
   const currentEpisode = Number(episode) || 1;
@@ -206,6 +210,12 @@ export default function WatchPage() {
 
   // Get initial start time for playback - computed ONLY when the media/episode changes
   const initialStartAt = useMemo(() => {
+    // Check if navigated back via miniplayer expand with exact timestamp
+    if (location.state && typeof location.state === 'object' && 'resumeAt' in location.state) {
+      const resumeTime = Number((location.state as any).resumeAt);
+      if (resumeTime > 0) return resumeTime;
+    }
+
     const saved = getEpisodeProgress(
       Number(id),
       mediaType,
@@ -214,7 +224,24 @@ export default function WatchPage() {
     );
     return saved?.resumeProgress ?? (saved?.progress && saved.progress > 180 ? saved.progress : 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, mediaType, currentSeason, currentEpisode]);
+  }, [id, mediaType, currentSeason, currentEpisode, location.state]);
+
+  // Sync active media into PlayerContext for seamless floating miniplayer docking
+  useEffect(() => {
+    if (!id || !details) return;
+
+    playMedia({
+      id: Number(id),
+      type: mediaType,
+      title: details.title || details.name || 'Stream',
+      posterPath: details.poster_path || undefined,
+      backdropPath: details.backdrop_path || undefined,
+      season: mediaType === 'tv' ? currentSeason : undefined,
+      episode: mediaType === 'tv' ? currentEpisode : undefined,
+      releaseYear: year ? Number(year) : undefined,
+      startAt: initialStartAt,
+    });
+  }, [id, mediaType, currentSeason, currentEpisode, details, year, initialStartAt, playMedia]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white pt-20 pb-24">
@@ -251,6 +278,7 @@ export default function WatchPage() {
           startAt={initialStartAt}
           onProgressUpdate={(prog, dur) => {
             updateProgress(Number(id), mediaType, prog, dur, currentSeason, currentEpisode);
+            updatePlayback(prog, dur, true);
           }}
           nextEpisodeInfo={nextEpisodeInfo}
           onPlayNextEpisode={handleNextEpisode}
