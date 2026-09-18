@@ -1,5 +1,5 @@
 // WATCHD PWA Service Worker with Offline Resilience
-const CACHE_NAME = 'watchd-pwa-v2';
+const CACHE_NAME = 'watchd-pwa-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
