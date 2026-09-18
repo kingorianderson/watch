@@ -215,7 +215,6 @@ export default function Navbar() {
   };
 
   const navLinks = [
-    { name: 'Home', path: '/' },
     { name: 'Live Sports', path: '/sports', icon: Trophy, isLive: true },
     { name: 'Movies', path: '/movies', icon: Film },
     { name: 'TV Series', path: '/series', icon: Tv },
@@ -287,26 +286,13 @@ export default function Navbar() {
                   </Link>
                 );
               })}
-
-              {/* Desktop Support Button */}
-              <button
-                onClick={openSupportModal}
-                className="ml-1 px-3 py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-semibold transition hover:scale-105 flex items-center gap-1.5 cursor-pointer shrink-0 backdrop-blur-md"
-                title="Support WATCHD with a tip"
-              >
-                <Heart className="w-3.5 h-3.5 text-red-400 fill-red-400 animate-pulse" />
-                <span>Support</span>
-              </button>
             </div>
           </div>
 
           {/* Desktop Search Bar & User Actions */}
-          <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
-            {/* Subtle vertical divider */}
-            <div className="h-5 w-px bg-white/15 hidden md:block mr-0.5" />
-
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Desktop-only Search Bar */}
-            <div className="relative hidden md:block w-40 md:w-52 lg:w-64" ref={searchRef}>
+            <div className="relative hidden md:block w-36 sm:w-48 lg:w-60" ref={searchRef}>
               <form onSubmit={handleSearchSubmit} className="relative">
                 <input
                   ref={desktopInputRef}
@@ -482,6 +468,19 @@ export default function Navbar() {
                 </div>
               )}
             </div>
+
+            {/* Desktop Support Button */}
+            <button
+              onClick={openSupportModal}
+              className="hidden sm:inline-flex px-3 sm:px-3.5 py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-semibold transition hover:scale-105 items-center gap-1.5 cursor-pointer shrink-0 backdrop-blur-md shadow-sm"
+              title="Support WATCHD with a tip"
+            >
+              <Heart className="w-3.5 h-3.5 text-red-400 fill-red-400 animate-pulse" />
+              <span>Support</span>
+            </button>
+
+            {/* Subtle vertical divider */}
+            <div className="h-5 w-px bg-white/15 hidden sm:block" />
 
             {/* Mobile Search Button */}
             <button
