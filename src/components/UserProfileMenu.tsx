@@ -56,7 +56,7 @@ export default function UserProfileMenu() {
 
       {/* Floating Dropdown Card */}
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-72 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 divide-y divide-zinc-800">
+        <div className="absolute right-0 top-full mt-2.5 w-72 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 divide-y divide-zinc-800">
           {/* Profile Header */}
           <div className="p-4 bg-zinc-950/60 flex items-center gap-3">
             <img
