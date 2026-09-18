@@ -21,6 +21,7 @@ import {
   Wifi,
   Sparkles,
   Type,
+  PictureInPicture2,
 } from 'lucide-react';
 import type { StreamQuality, SubtitleTrack } from '../services/directStreamService';
 import {
@@ -222,6 +223,7 @@ export default function NativePlayer({
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPip, setIsPip] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isQualitySwitching, setIsQualitySwitching] = useState(false);
@@ -656,6 +658,11 @@ export default function NativePlayer({
         hlsRefB.current = null;
       }
 
+      // Transfer Picture-in-Picture seamlessly if active
+      if (typeof document !== 'undefined' && document.pictureInPictureElement && inactiveVid.requestPictureInPicture) {
+        inactiveVid.requestPictureInPicture().catch(() => {});
+      }
+
       activeVid.removeAttribute('src');
       activeVid.load();
 
@@ -943,6 +950,44 @@ export default function NativePlayer({
     }
   };
 
+  const togglePictureInPicture = useCallback(async () => {
+    try {
+      const activeVid = getActiveVideo();
+      if (!activeVid) return;
+
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        setIsPip(false);
+      } else if (document.pictureInPictureEnabled && activeVid.requestPictureInPicture) {
+        await activeVid.requestPictureInPicture();
+        setIsPip(true);
+      }
+    } catch (err) {
+      console.warn('Picture-in-Picture error:', err);
+    }
+  }, [getActiveVideo]);
+
+  // Picture in Picture event synchronization
+  useEffect(() => {
+    const onEnterPip = () => setIsPip(true);
+    const onLeavePip = () => setIsPip(false);
+
+    const vA = videoRefA.current;
+    const vB = videoRefB.current;
+
+    vA?.addEventListener('enterpictureinpicture', onEnterPip);
+    vA?.addEventListener('leavepictureinpicture', onLeavePip);
+    vB?.addEventListener('enterpictureinpicture', onEnterPip);
+    vB?.addEventListener('leavepictureinpicture', onLeavePip);
+
+    return () => {
+      vA?.removeEventListener('enterpictureinpicture', onEnterPip);
+      vA?.removeEventListener('leavepictureinpicture', onLeavePip);
+      vB?.removeEventListener('enterpictureinpicture', onEnterPip);
+      vB?.removeEventListener('leavepictureinpicture', onLeavePip);
+    };
+  }, []);
+
   const handleSpeedChange = (speed: number) => {
     setPlaybackSpeed(speed);
     const video = getActiveVideo();
@@ -1034,6 +1079,16 @@ export default function NativePlayer({
         case 'f':
           e.preventDefault();
           toggleFullscreen();
+          break;
+        case 'i':
+          e.preventDefault();
+          togglePictureInPicture();
+          break;
+        case 'p':
+          if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            togglePictureInPicture();
+          }
           break;
         case 'm':
           e.preventDefault();
@@ -1488,6 +1543,21 @@ export default function NativePlayer({
             >
               <Settings className="w-4 h-4 transition-transform duration-200" />
             </button>
+
+            {/* Picture-in-Picture (PiP) Button */}
+            {typeof document !== 'undefined' && (
+              <button
+                onClick={togglePictureInPicture}
+                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                  isPip
+                    ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
+                    : 'hover:bg-white/15 text-zinc-300 hover:text-white'
+                }`}
+                title={isPip ? 'Exit Picture in Picture (i)' : 'Picture in Picture (i)'}
+              >
+                <PictureInPicture2 className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Fullscreen Button */}
             <button
