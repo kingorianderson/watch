@@ -17,7 +17,6 @@ import {
   ArrowLeft,
   Heart,
   Trophy,
-  Layers,
 } from 'lucide-react';
 import { tmdbService, getPosterUrl } from '../services/tmdb';
 import type { MediaItem } from '../types/media';
@@ -220,7 +219,6 @@ export default function Navbar() {
     { name: 'Live Sports', path: '/sports', icon: Trophy, isLive: true },
     { name: 'Movies', path: '/movies', icon: Film },
     { name: 'TV Series', path: '/series', icon: Tv },
-    { name: 'Universes', path: '/collections', icon: Layers },
     { name: 'Watchlist', path: '/watchlist', icon: Bookmark, count: watchlist.length },
   ];
 
