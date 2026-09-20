@@ -1,5 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
-import { Server, RefreshCw, Sparkles, Info, Play, RotateCcw, X, AlertCircle } from 'lucide-react';
+import {
+  Server,
+  RefreshCw,
+  Sparkles,
+  Info,
+  Play,
+  RotateCcw,
+  X,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  Zap,
+  Layers,
+} from 'lucide-react';
 import { STREAM_SERVERS, type StreamServer } from '../services/providers';
 import { directStreamService, type DirectStreamResult } from '../services/directStreamService';
 import NativePlayer from './NativePlayer';
@@ -52,6 +66,8 @@ export default function VideoPlayer({
   const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null);
   const [directStreamData, setDirectStreamData] = useState<DirectStreamResult | null>(null);
   const [nativeScrapeFailed, setNativeScrapeFailed] = useState<boolean>(false);
+  const [isServerAccordionOpen, setIsServerAccordionOpen] = useState<boolean>(false);
+  const [autoSwitchToast, setAutoSwitchToast] = useState<{ message: string } | null>(null);
 
   const countdownTimerRef = useRef<any>(null);
   const hasTriggeredNextRef = useRef<boolean>(false);
@@ -110,18 +126,30 @@ export default function VideoPlayer({
             if (res && res.qualities && res.qualities.length > 0) {
               setDirectStreamData(res);
               setNativeScrapeFailed(false);
+              setIsLoading(false);
             } else {
+              // Seamless Auto-Transition from Tier 1/2 to Tier 3 (Server 2: VidLink)
               setDirectStreamData(null);
-              setNativeScrapeFailed(true);
+              setNativeScrapeFailed(false);
+              setCurrentServer(STREAM_SERVERS[1]);
+              setIsLoading(false);
+              setAutoSwitchToast({
+                message: '⚡ Auto-switched to Server 2 (VidLink) for HD streaming',
+              });
+              setTimeout(() => setAutoSwitchToast(null), 5000);
             }
-            setIsLoading(false);
           }
         })
         .catch(() => {
           if (isMounted) {
             setDirectStreamData(null);
-            setNativeScrapeFailed(true);
+            setNativeScrapeFailed(false);
+            setCurrentServer(STREAM_SERVERS[1]);
             setIsLoading(false);
+            setAutoSwitchToast({
+              message: '⚡ Auto-switched to Server 2 (VidLink) for HD streaming',
+            });
+            setTimeout(() => setAutoSwitchToast(null), 5000);
           }
         });
 
@@ -341,6 +369,20 @@ export default function VideoPlayer({
           </div>
         )}
 
+        {/* Seamless Auto-switch Notification Toast */}
+        {autoSwitchToast && (
+          <div className="absolute top-4 right-4 z-40 flex items-center gap-2 bg-zinc-900/95 border border-amber-500/40 backdrop-blur-md px-3.5 py-2 rounded-xl text-xs text-white shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+            <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>{autoSwitchToast.message}</span>
+            <button
+              onClick={() => setAutoSwitchToast(null)}
+              className="text-zinc-500 hover:text-white p-0.5 rounded cursor-pointer ml-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Dynamic Player Rendering: Native HLS Player vs Embed Iframe */}
         {currentServer.isNativeHls ? (
           directStreamData ? (
@@ -363,9 +405,9 @@ export default function VideoPlayer({
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950 p-6 text-center space-y-4">
               <div className="w-14 h-14 border-4 border-red-500/20 border-t-red-500 rounded-full animate-spin" />
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-white">Scraping Multi-Source Streams...</h3>
+                <h3 className="text-base font-bold text-white">Connecting to High-Speed Stream...</h3>
                 <p className="text-xs text-zinc-400 max-w-sm">
-                  Connecting to @movie-web 4K cluster and querying 15+ high-speed sources for zero-ad playback.
+                  Checking 7-Account VIP Engine and multi-source scrapers for buffer-free playback.
                 </p>
               </div>
               <div className="flex items-center gap-1.5 text-xs text-red-400 font-medium bg-red-950/40 px-3 py-1 rounded-full border border-red-800/40">
@@ -381,7 +423,7 @@ export default function VideoPlayer({
               <div className="max-w-md space-y-1">
                 <h3 className="text-lg font-bold text-white">Direct Stream Unavailable</h3>
                 <p className="text-xs text-zinc-400">
-                  This specific title is not in the direct HLS archive. Switch to Server 2 (VidLink) to watch in full HD.
+                  Switch to Server 2 (VidLink) to watch in full HD.
                 </p>
               </div>
               <div className="flex items-center gap-3 pt-2">
@@ -408,48 +450,44 @@ export default function VideoPlayer({
         )}
       </div>
 
-      {/* Control Bar: Server Switching & Controls */}
-      <div className="bg-zinc-900/80 backdrop-blur-md border border-zinc-800 p-4 rounded-2xl flex flex-col space-y-3">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          {/* Server Switcher */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 mr-2 uppercase tracking-wider">
-              <Server className="w-4 h-4 text-red-500" />
-              <span>Servers:</span>
+      {/* Sleek Collapsible Server Control Bar */}
+      <div className="bg-zinc-900/60 backdrop-blur-md border border-zinc-800/80 rounded-2xl overflow-hidden transition-all duration-300 shadow-lg">
+        {/* Compact Summary Header Bar */}
+        <div className="px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-950/80 border border-zinc-800 text-xs font-semibold shadow-inner">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span className="text-zinc-400">Active Source:</span>
+              <span className="text-white font-bold">{currentServer.name}</span>
+              {currentServer.badge && (
+                <span className="ml-0.5 px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-red-600/20 text-red-400 border border-red-500/30">
+                  {currentServer.badge}
+                </span>
+              )}
             </div>
 
-            {STREAM_SERVERS.map((server) => {
-              const isSelected = server.id === currentServer.id;
-              return (
-                <button
-                  key={server.id}
-                  onClick={() => handleServerChange(server)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 cursor-pointer ${
-                    isSelected
-                      ? 'bg-red-600 text-white shadow-lg shadow-red-600/30 ring-2 ring-red-500/50'
-                      : 'bg-zinc-800/90 text-zinc-300 hover:bg-zinc-700 hover:text-white'
-                  }`}
-                >
-                  <span>{server.name}</span>
-                  {server.badge && (
-                    <span
-                      className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
-                        isSelected ? 'bg-red-700 text-red-100' : 'bg-zinc-950 text-zinc-400 border border-zinc-700/50'
-                      }`}
-                    >
-                      {server.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            <button
+              onClick={() => setIsServerAccordionOpen(!isServerAccordionOpen)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                isServerAccordionOpen
+                  ? 'bg-zinc-800 text-white border-zinc-600 shadow-inner'
+                  : 'bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 border-zinc-700/60'
+              }`}
+            >
+              <Server className="w-3.5 h-3.5 text-red-400" />
+              <span>{isServerAccordionOpen ? 'Hide Server Mirrors' : 'Change Server (11 Mirrors)'}</span>
+              {isServerAccordionOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+              )}
+            </button>
           </div>
 
-          {/* Action Controls */}
-          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
               onClick={handleReload}
-              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition border border-zinc-700 cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition border border-zinc-700/60 cursor-pointer"
               title="Reload Video Stream"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -458,13 +496,59 @@ export default function VideoPlayer({
           </div>
         </div>
 
-        {/* Server Quality Note */}
-        <div className="pt-2 border-t border-zinc-800/60 flex items-center gap-2 text-[11px] text-zinc-400">
-          <Info className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-          <span>
-            Server 1 (Direct 4K) provides ad-free native HLS streaming with custom resolution &amp; subtitle switcher. If a stream buffers, switch servers above.
-          </span>
-        </div>
+        {/* Expandable Server Grid */}
+        {isServerAccordionOpen && (
+          <div className="p-4 border-t border-zinc-800/80 bg-zinc-950/40 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-red-500" />
+              <span>Available Server Mirrors & Backup Streams</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+              {STREAM_SERVERS.map((server) => {
+                const isSelected = server.id === currentServer.id;
+                return (
+                  <button
+                    key={server.id}
+                    onClick={() => {
+                      handleServerChange(server);
+                    }}
+                    className={`p-2.5 rounded-xl text-xs font-semibold transition-all duration-200 flex flex-col items-start gap-1 text-left cursor-pointer border ${
+                      isSelected
+                        ? 'bg-red-600/90 text-white shadow-lg shadow-red-600/30 border-red-500 ring-2 ring-red-500/40'
+                        : 'bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800/80 hover:border-zinc-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="truncate font-bold">{server.name}</span>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-white shrink-0" />}
+                    </div>
+                    {server.badge && (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.2 rounded font-mono truncate max-w-full ${
+                          isSelected
+                            ? 'bg-red-950/80 text-red-200'
+                            : 'bg-zinc-950 text-zinc-400 border border-zinc-800'
+                        }`}
+                      >
+                        {server.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-400">
+              <div className="flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                <span>
+                  Streams auto-cascade across servers. Use manual selection above if you prefer a specific player or server mirror.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
