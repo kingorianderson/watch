@@ -6677,7 +6677,18 @@ var CryptoJS;
   CryptoJS = module.exports || globalThis.CryptoJS;
 })();
 
-const DEFAULT_UI_COOKIE = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODk1NzIxNzMsIm5iZiI6MTc4OTU3MjE3MywiZXhwIjoxODIwNjc2MTkzLCJkYXRhIjp7InVpZCI6MjQyMzM4MiwidG9rZW4iOiI3YzNkMGI0YmFhYmZkZWRhZTQ0YzFhYWU2ZTZhOWJkNiJ9fQ.XJBS5xyGZ7bn1y6xuJqN3Fj8f28N0Ai3c-7oyPytiQo';
+// Master FebBox Multi-Account Pool (Rotated for Load Balancing & Failover)
+const FEBBOX_ACCOUNT_POOL = [
+  'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODk4ODg5NzQsIm5iZiI6MTc4OTg4ODk3NCwiZXhwIjoxODIwOTkyOTk0LCJkYXRhIjp7InVpZCI6MjQzNTUzNCwidG9rZW4iOiJkMmExODIxOTc2MWM5OTE3NzU3YjhjNzgzOWYzMDZjMSJ9fQ.3NtnhwDIPqYaNLnW7njzyq1T3b8CZuXskM_Sv54-pBQ',
+  'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODk4ODkxMTEsIm5iZiI6MTc4OTg4OTExMSwiZXhwIjoxODIwOTkzMTMxLCJkYXRhIjp7InVpZCI6MjQzNTU0MSwidG9rZW4iOiIyZDgwOGE1YjBlZDlmYTNlN2YyOGEyZmE4N2M2NWY5NyJ9fQ.2b6cstuQIHWFjOxoscM0B5C9Mnifr4RYaM7hGc9jCpg',
+  'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODk4ODkxNjgsIm5iZiI6MTc4OTg4OTE2OCwiZXhwIjoxODIwOTkzMTg4LCJkYXRhIjp7InVpZCI6MjQzNTU0MiwidG9rZW4iOiIwZjMyZjc3NTc3MDJmYWIyMjIxZDU4YWY4MzMyMmE0YiJ9fQ.knMJ1LlS37_wrqkoAxKO4nNLVCfOZBgfCyuUd7e27rs',
+  'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODk4ODkyNDQsIm5iZiI6MTc4OTg4OTI0NCwiZXhwIjoxODIwOTkzMjY0LCJkYXRhIjp7InVpZCI6MjQzNTU0NiwidG9rZW4iOiI1ODM0ODAwOGYxZjliMjM1Nzc5ODAyZTlmOTRkMWVmZSJ9fQ.VBzZEA_fEBWxWfhpW_qJVHVnpfys6nLxrfl4NvAAjaU',
+  'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODk4ODkzMTAsIm5iZiI6MTc4OTg4OTMxMCwiZXhwIjoxODIwOTkzMzMwLCJkYXRhIjp7InVpZCI6MjQzNTU1MiwidG9rZW4iOiJlMWYzZmE3MjI4NTExZmQ0NzU5OWIxZGJjNzk2MDhhMyJ9fQ.Rlr9hWTgXnJwrJrX2TfsFy7u87sCvMGePb-yZeuKA1A',
+  'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODk4ODkzODUsIm5iZiI6MTc4OTg4OTM4NSwiZXhwIjoxODIwOTkzNDA1LCJkYXRhIjp7InVpZCI6MjQzNTU1NiwidG9rZW4iOiI0YWRlYzZlNGRiNjJhNjVlYzY4NzM0NDM5ZWNhOTc4MSJ9fQ.Diak5KCGAYCOdZvJYIx7wds1Y8h98SKQrif1OCDZBXI',
+  'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3ODk1NzIxNzMsIm5iZiI6MTc4OTU3MjE3MywiZXhwIjoxODIwNjc2MTkzLCJkYXRhIjp7InVpZCI6MjQyMzM4MiwidG9rZW4iOiI3YzNkMGI0YmFhYmZkZWRhZTQ0YzFhYWU2ZTZhOWJkNiJ9fQ.XJBS5xyGZ7bn1y6xuJqN3Fj8f28N0Ai3c-7oyPytiQo',
+];
+
+const DEFAULT_UI_COOKIE = FEBBOX_ACCOUNT_POOL[0];
 
 const CONFIG = {
   BASE_URL: 'https://mbpapi.shegu.net/api/api_client/index/',
@@ -6896,7 +6907,7 @@ async function fetchSubtitles({ title, type, season = 1, episode = 1, year, host
   }
 }
 
-async function resolveFebBoxStream({ title, type = 'movie', season = 1, episode = 1, year, uiCookie = DEFAULT_UI_COOKIE, host = 'febbox-resolver.kingzart254.workers.dev' }) {
+async function resolveFebBoxStream({ title, type = 'movie', season = 1, episode = 1, year, uiCookie, host = 'febbox-resolver.kingzart254.workers.dev' }) {
   const isTv = type === 'tv' || type === 'show';
   const showboxType = isTv ? 'tv' : 'movie';
   const cleanTitle = (title || '').trim();
@@ -6937,122 +6948,146 @@ async function resolveFebBoxStream({ title, type = 'movie', season = 1, episode 
   }
 
   const shareKey = shareUrl.split('/').pop();
-  let targetFid = null;
 
-  if (!isTv) {
-    // Movie
-    const fileRes = await fetch(
-      `https://www.febbox.com/file/file_share_list?share_key=${shareKey}&pwd=&parent_id=0&is_html=0`,
-      {
-        headers: {
-          'Cookie': `ui=${uiCookie}`,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': `https://www.febbox.com/share/${shareKey}`,
-          'x-requested-with': 'XMLHttpRequest',
-        },
+  // 3. Multi-Account Pool Rotation & Automatic Failover Retry
+  const candidateCookies = uiCookie
+    ? [uiCookie, ...FEBBOX_ACCOUNT_POOL.filter((c) => c !== uiCookie)]
+    : [...FEBBOX_ACCOUNT_POOL].sort(() => Math.random() - 0.5);
+
+  let lastError = null;
+
+  for (let idx = 0; idx < candidateCookies.length; idx++) {
+    const activeCookie = candidateCookies[idx];
+    try {
+      let targetFid = null;
+
+      if (!isTv) {
+        // Movie
+        const fileRes = await fetch(
+          `https://www.febbox.com/file/file_share_list?share_key=${shareKey}&pwd=&parent_id=0&is_html=0`,
+          {
+            headers: {
+              'Cookie': `ui=${activeCookie}`,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Referer': `https://www.febbox.com/share/${shareKey}`,
+              'x-requested-with': 'XMLHttpRequest',
+            },
+          }
+        );
+        const fileData = await fileRes.json();
+        const files = fileData?.data?.file_list || [];
+        const videoFile = files.find((f) => !f.is_dir) || files[0];
+        if (!videoFile?.fid) {
+          throw new Error('Video file missing from FebBox share');
+        }
+        targetFid = videoFile.fid;
+      } else {
+        // TV Series
+        const seasonRes = await fetch(
+          `https://www.febbox.com/file/file_share_list?share_key=${shareKey}&pwd=&parent_id=0&is_html=0`,
+          {
+            headers: {
+              'Cookie': `ui=${activeCookie}`,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Referer': `https://www.febbox.com/share/${shareKey}`,
+              'x-requested-with': 'XMLHttpRequest',
+            },
+          }
+        );
+        const seasonData = await seasonRes.json();
+        const seasonFolders = seasonData?.data?.file_list || [];
+
+        const targetSeasonNum = Number(season);
+        const seasonFolder =
+          seasonFolders.find((f) => {
+            const name = (f.file_name || '').toLowerCase();
+            return (
+              name.includes(`season ${targetSeasonNum}`) ||
+              name.includes(`season${targetSeasonNum}`) ||
+              name.includes(`s${targetSeasonNum}`) ||
+              name === `${targetSeasonNum}`
+            );
+          }) ||
+          seasonFolders[seasonFolders.length - targetSeasonNum] ||
+          seasonFolders[0];
+
+        if (!seasonFolder?.fid) {
+          throw new Error(`Season ${season} folder not found`);
+        }
+
+        const epRes = await fetch(
+          `https://www.febbox.com/file/file_share_list?share_key=${shareKey}&pwd=&parent_id=${seasonFolder.fid}&is_html=0`,
+          {
+            headers: {
+              'Cookie': `ui=${activeCookie}`,
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Referer': `https://www.febbox.com/share/${shareKey}`,
+              'x-requested-with': 'XMLHttpRequest',
+            },
+          }
+        );
+        const epData = await epRes.json();
+        const epFiles = epData?.data?.file_list || [];
+
+        const targetEpNum = Number(episode);
+        const epNumPad = String(targetEpNum).padStart(2, '0');
+        const epFile =
+          epFiles.find((f) => {
+            const name = (f.file_name || '').toLowerCase();
+            return (
+              name.includes(`e${epNumPad}`) ||
+              name.includes(`e${targetEpNum}`) ||
+              name.includes(`ep${epNumPad}`) ||
+              name.includes(`episode ${targetEpNum}`) ||
+              name.includes(`episode${targetEpNum}`)
+            );
+          }) ||
+          epFiles[targetEpNum - 1] ||
+          epFiles[0];
+
+        if (!epFile?.fid) {
+          throw new Error(`Episode ${episode} not found in Season ${season}`);
+        }
+        targetFid = epFile.fid;
       }
-    );
-    const fileData = await fileRes.json();
-    const files = fileData?.data?.file_list || [];
-    const videoFile = files.find((f) => !f.is_dir) || files[0];
-    if (!videoFile?.fid) {
-      throw new Error('Video file missing from FebBox share');
-    }
-    targetFid = videoFile.fid;
-  } else {
-    // TV Series
-    const seasonRes = await fetch(
-      `https://www.febbox.com/file/file_share_list?share_key=${shareKey}&pwd=&parent_id=0&is_html=0`,
-      {
-        headers: {
-          'Cookie': `ui=${uiCookie}`,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': `https://www.febbox.com/share/${shareKey}`,
-          'x-requested-with': 'XMLHttpRequest',
-        },
+
+      // Fetch Qualities & Subtitles in parallel
+      const [qualRes, subtitles] = await Promise.all([
+        fetch(`https://www.febbox.com/console/video_quality_list?fid=${targetFid}`, {
+          headers: {
+            'Cookie': `ui=${activeCookie}`,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': `https://www.febbox.com/share/${shareKey}`,
+            'x-requested-with': 'XMLHttpRequest',
+          },
+        }).then((r) => r.json()),
+        fetchSubtitles({ title: bestItem.title, type, season, episode, year: bestItem.year, host }),
+      ]);
+
+      const rawHtml = qualRes?.html || '';
+      const qualities = parseVideoQualitiesHtml(rawHtml);
+
+      if (qualities.length === 0) {
+        throw new Error('No stream qualities returned from FebBox');
       }
-    );
-    const seasonData = await seasonRes.json();
-    const seasonFolders = seasonData?.data?.file_list || [];
 
-    const targetSeasonNum = Number(season);
-    const seasonFolder = seasonFolders.find((f) => {
-      const name = (f.file_name || '').toLowerCase();
-      return (
-        name.includes(`season ${targetSeasonNum}`) ||
-        name.includes(`season${targetSeasonNum}`) ||
-        name.includes(`s${targetSeasonNum}`) ||
-        name === `${targetSeasonNum}`
-      );
-    }) || seasonFolders[seasonFolders.length - targetSeasonNum] || seasonFolders[0];
-
-    if (!seasonFolder?.fid) {
-      throw new Error(`Season ${season} folder not found`);
+      return {
+        success: true,
+        title: bestItem.title,
+        year: bestItem.year,
+        fid: targetFid,
+        shareKey,
+        sourceName: 'Native 4K VIP Engine (Zero Ads)',
+        qualities,
+        subtitles,
+      };
+    } catch (err) {
+      lastError = err;
+      console.warn(`FebBox account #${idx + 1} failed (${err.message}), trying next account from pool...`);
     }
-
-    const epRes = await fetch(
-      `https://www.febbox.com/file/file_share_list?share_key=${shareKey}&pwd=&parent_id=${seasonFolder.fid}&is_html=0`,
-      {
-        headers: {
-          'Cookie': `ui=${uiCookie}`,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': `https://www.febbox.com/share/${shareKey}`,
-          'x-requested-with': 'XMLHttpRequest',
-        },
-      }
-    );
-    const epData = await epRes.json();
-    const epFiles = epData?.data?.file_list || [];
-
-    const targetEpNum = Number(episode);
-    const epNumPad = String(targetEpNum).padStart(2, '0');
-    const epFile = epFiles.find((f) => {
-      const name = (f.file_name || '').toLowerCase();
-      return (
-        name.includes(`e${epNumPad}`) ||
-        name.includes(`e${targetEpNum}`) ||
-        name.includes(`ep${epNumPad}`) ||
-        name.includes(`episode ${targetEpNum}`) ||
-        name.includes(`episode${targetEpNum}`)
-      );
-    }) || epFiles[targetEpNum - 1] || epFiles[0];
-
-    if (!epFile?.fid) {
-      throw new Error(`Episode ${episode} not found in Season ${season}`);
-    }
-    targetFid = epFile.fid;
   }
 
-  // 3. Fetch Qualities & Subtitles in parallel
-  const [qualRes, subtitles] = await Promise.all([
-    fetch(`https://www.febbox.com/console/video_quality_list?fid=${targetFid}`, {
-      headers: {
-        'Cookie': `ui=${uiCookie}`,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': `https://www.febbox.com/share/${shareKey}`,
-        'x-requested-with': 'XMLHttpRequest',
-      },
-    }).then((r) => r.json()),
-    fetchSubtitles({ title: bestItem.title, type, season, episode, year: bestItem.year, host }),
-  ]);
-
-  const rawHtml = qualRes?.html || '';
-  const qualities = parseVideoQualitiesHtml(rawHtml);
-
-  if (qualities.length === 0) {
-    throw new Error('No stream qualities returned from FebBox');
-  }
-
-  return {
-    success: true,
-    title: bestItem.title,
-    year: bestItem.year,
-    fid: targetFid,
-    shareKey,
-    sourceName: 'Native 4K VIP Engine (Zero Ads)',
-    qualities,
-    subtitles,
-  };
+  throw lastError || new Error('All FebBox accounts in pool failed to resolve stream');
 }
 
 export default {
@@ -7174,7 +7209,7 @@ export default {
     const season = url.searchParams.get('season') || '1';
     const episode = url.searchParams.get('episode') || '1';
     const year = url.searchParams.get('year') ? Number(url.searchParams.get('year')) : undefined;
-    const customUiCookie = url.searchParams.get('ui') || request.headers.get('x-auth-cookie') || DEFAULT_UI_COOKIE;
+    const customUiCookie = url.searchParams.get('ui') || request.headers.get('x-auth-cookie') || env?.FEBBOX_UI_COOKIE;
 
     if (!title && !tmdbId) {
       return new Response(

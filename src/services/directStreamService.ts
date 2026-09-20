@@ -1,4 +1,7 @@
 /**
+ * Direct Stream Resolver Service powered by @movie-web/providers
+ * Scrapes 15+ streaming hosts in parallel (FlixHQ, VidCloud, Showbox, Smashy, SuperStream, etc.)
+ * with zero third-party ads, multi-resolution streams (4K, 1080p, 720p), and WebVTT subtitles.
  * Direct Stream Resolver Service powered by FebBox 4K Native VIP Engine & @movie-web/providers
  * Resolves ad-free, direct Native 4K & 1080p HLS streaming sources with multi-resolution switcher,
  * custom red scrubber, and WebVTT subtitles.
@@ -12,12 +15,13 @@ import {
   type Stream,
   type ProviderControls,
 } from '@movie-web/providers';
-import { subtitleService } from './subtitleService';
 
 export interface StreamQuality {
   label: string;
   shortLabel?: string;
   resolution?: number;
+  quality?: string;
+  size?: string;
   url: string;
   isDefault?: boolean;
 }
@@ -38,7 +42,9 @@ export interface DirectStreamResult {
 }
 
 const WORKER_ENDPOINT = 'https://febbox-resolver.kingzart254.workers.dev';
-const CORS_PROXY_URL = `${WORKER_ENDPOINT}/?url=`;
+const CORS_PROXY_URL =
+  import.meta.env.VITE_STREAM_PROXY_URL ||
+  `${WORKER_ENDPOINT}/?url=`;
 
 // Cached initialized provider runner
 let providerRunner: ProviderControls | null = null;
@@ -61,6 +67,7 @@ function getProviderRunner() {
 
 export const directStreamService = {
   /**
+   * Resolves direct HLS / MP4 stream sources across 15+ providers in parallel
    * Resolves direct HLS / MP4 stream sources from FebBox VIP Engine & fallback scraper cluster
    */
   async getDirectStream(
@@ -101,26 +108,17 @@ export const directStreamService = {
 
       if (febboxData && febboxData.success && Array.isArray(febboxData.qualities) && febboxData.qualities.length > 0) {
         const streamQualities: StreamQuality[] = febboxData.qualities.map((q: any) => ({
-          label: q.label || '1080p (Full HD)',
-          shortLabel: q.shortLabel || (q.label?.includes('4K') ? '4K' : q.label?.includes('720') ? '720p' : '1080p'),
-          resolution: q.resolution || (q.label?.includes('4K') ? 2160 : q.label?.includes('720') ? 720 : 1080),
+          label: q.label || '1080p HD',
           url: q.url,
           isDefault: q.isDefault || false,
         }));
 
-        // Sort descending by resolution (4K -> 1080p -> 720p -> 480p -> 360p)
-        streamQualities.sort((a, b) => (b.resolution || 0) - (a.resolution || 0));
-
         // Ensure at least one default
         if (!streamQualities.some((q) => q.isDefault)) {
-          const defaultChoice =
-            streamQualities.find((q) => q.shortLabel === '1080p') ||
-            streamQualities.find((q) => q.shortLabel === '4K') ||
-            streamQualities[0];
-          if (defaultChoice) defaultChoice.isDefault = true;
+          streamQualities[0].isDefault = true;
         }
 
-        let subtitles: SubtitleTrack[] = Array.isArray(febboxData.subtitles)
+        const subtitles: SubtitleTrack[] = Array.isArray(febboxData.subtitles)
           ? febboxData.subtitles.map((s: any) => ({
               label: s.label || s.language || 'English',
               language: s.language || 'en',
@@ -128,15 +126,6 @@ export const directStreamService = {
               isDefault: s.isDefault || false,
             }))
           : [];
-
-        // Fallback to subtitleService if worker returned no subtitles
-        if (subtitles.length === 0) {
-          try {
-            subtitles = await subtitleService.getSubtitles(cleanTitle, isTv ? 'tv' : 'movie', season, episode, year, tmdbId);
-          } catch (subErr) {
-            console.warn('Subtitle fallback error:', subErr);
-          }
-        }
 
         return {
           title: febboxData.title || cleanTitle,
@@ -152,8 +141,12 @@ export const directStreamService = {
     // 2. Second Priority: Fallback to @movie-web/providers scraper cluster
     try {
       const runner = getProviderRunner();
+      const isTv = type === 'tv';
+      const cleanTitle = title || 'Media';
+      const year = releaseYear || new Date().getFullYear();
 
       if (runner) {
+        // Scrape movie or show using @movie-web/providers
         const scrapePromise = isTv
           ? runner.runAll({
               media: {
@@ -174,7 +167,8 @@ export const directStreamService = {
               },
             });
 
-        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+        // Timeout race to prevent long hangs (max 7 seconds for scraper resolution)
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 7000));
         const output = await Promise.race([scrapePromise, timeoutPromise]);
 
         if (output && output.stream) {
@@ -206,21 +200,12 @@ export const directStreamService = {
             }
           }
 
-          let subtitles: SubtitleTrack[] = (stream.captions || []).map((c) => ({
+          const subtitles: SubtitleTrack[] = (stream.captions || []).map((c) => ({
             label: `${c.language.toUpperCase()} ${c.type ? `[${c.type.toUpperCase()}]` : ''}`,
             language: c.language,
             url: c.url,
             isDefault: c.language.toLowerCase().startsWith('en'),
           }));
-
-          // Fallback to subtitleService if scraper cluster returned no captions
-          if (subtitles.length === 0) {
-            try {
-              subtitles = await subtitleService.getSubtitles(cleanTitle, isTv ? 'tv' : 'movie', season, episode, year);
-            } catch (subErr) {
-              console.warn('Subtitle fallback error for scraper cluster:', subErr);
-            }
-          }
 
           if (qualities.length > 0) {
             return {
