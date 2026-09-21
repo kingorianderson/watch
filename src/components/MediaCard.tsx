@@ -73,7 +73,7 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
         />
 
         {/* Top Badges */}
-        <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-20">
+        <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none z-30">
           <div className="flex items-center gap-1">
             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-zinc-950/85 backdrop-blur-md text-red-400 border border-red-500/20 shadow">
               {isTv ? 'Show' : 'Movie'}
@@ -121,10 +121,10 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
         ) : null}
 
         {/* Hover Action Buttons Overlay */}
-        <div className="absolute inset-0 z-20 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3 pointer-events-none group-hover:pointer-events-auto">
+        <div className="absolute inset-0 z-20 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3 pointer-events-none">
           <Link
             to={playUrl}
-            className="w-12 h-12 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-lg shadow-red-600/50 transform scale-90 group-hover:scale-100 transition duration-300 cursor-pointer"
+            className="pointer-events-auto w-12 h-12 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-lg shadow-red-600/50 transform scale-90 group-hover:scale-100 transition duration-300 cursor-pointer"
             title={
               hasActiveResume
                 ? isTv && lastWatched?.season
@@ -145,7 +145,7 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
             <button
               type="button"
               onClick={handleInfoClick}
-              className="w-10 h-10 rounded-full bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 hover:text-white flex items-center justify-center backdrop-blur-md border border-zinc-600/50 transition cursor-pointer hover:scale-105"
+              className="pointer-events-auto w-10 h-10 rounded-full bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 hover:text-white flex items-center justify-center backdrop-blur-md border border-zinc-600/50 transition cursor-pointer hover:scale-105"
               title="More Info"
             >
               <Info className="w-4 h-4" />

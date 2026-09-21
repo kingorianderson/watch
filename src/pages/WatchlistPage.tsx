@@ -71,7 +71,7 @@ export default function WatchlistPage() {
                       alt={item.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                     />
-                    <div className="absolute top-2 right-2 z-10 pointer-events-auto">
+                    <div className="absolute top-2 right-2 z-30 pointer-events-auto">
                       <button
                         type="button"
                         onClick={() => removeFromWatchlist(item.id)}
@@ -82,7 +82,7 @@ export default function WatchlistPage() {
                       </button>
                     </div>
 
-                    <div className="absolute inset-0 z-10 bg-gradient-to-t from-zinc-950 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition flex items-center justify-center pointer-events-none group-hover:pointer-events-auto">
+                    <div className="absolute inset-0 z-10 bg-gradient-to-t from-zinc-950 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition flex items-center justify-center pointer-events-none">
                     {(() => {
                       const isTv = item.type === 'tv';
                       const lastWatched = isTv ? getLastWatched(item.id, 'tv') : null;
@@ -93,7 +93,7 @@ export default function WatchlistPage() {
                       return (
                         <Link
                           to={playUrl}
-                          className="w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xl hover:scale-110 transition cursor-pointer"
+                          className="pointer-events-auto w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xl hover:scale-110 transition cursor-pointer"
                           title={lastWatched ? `Resume S${lastWatched.season}:E${lastWatched.episode}` : 'Watch Now'}
                         >
                           <Play className="w-5 h-5 fill-white ml-0.5" />

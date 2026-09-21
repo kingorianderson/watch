@@ -6,8 +6,8 @@ import { cloudWatchlistService, isSupabaseConfigured } from '../services/supabas
 export interface WatchlistContextType {
   watchlist: WatchlistItem[];
   toggleWatchlist: (item: MediaItem) => void;
-  isInWatchlist: (id: number) => boolean;
-  removeFromWatchlist: (id: number) => void;
+  isInWatchlist: (id: number | string) => boolean;
+  removeFromWatchlist: (id: number | string) => void;
 }
 
 export const WatchlistContext = createContext<WatchlistContextType | undefined>(undefined);
@@ -47,8 +47,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
           try {
             const guestList: WatchlistItem[] = JSON.parse(guestStored);
             if (guestList.length > 0) {
-              const existingIds = new Set(currentList.map((i) => i.id));
-              const newItems = guestList.filter((i) => !existingIds.has(i.id));
+              const existingIds = new Set(currentList.map((i) => Number(i.id)));
+              const newItems = guestList.filter((i) => !existingIds.has(Number(i.id)));
               if (newItems.length > 0) {
                 currentList = [...newItems, ...currentList];
                 localStorage.setItem(userKey, JSON.stringify(currentList));
@@ -71,8 +71,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
             const cloudItems = cloudData || [];
 
             // 1. Push any local items not yet in cloud to Supabase
-            const cloudIdSet = new Set(cloudItems.map((i) => i.id));
-            const missingInCloud = currentList.filter((i) => !cloudIdSet.has(i.id));
+            const cloudIdSet = new Set(cloudItems.map((i) => Number(i.id)));
+            const missingInCloud = currentList.filter((i) => !cloudIdSet.has(Number(i.id)));
             if (missingInCloud.length > 0) {
               for (const item of missingInCloud) {
                 await cloudWatchlistService.addToWatchlist(user.id, item);
@@ -81,8 +81,8 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
             // 2. Merge local + cloud items
             const combinedMap = new Map<number, WatchlistItem>();
-            cloudItems.forEach((i) => combinedMap.set(i.id, i));
-            currentList.forEach((i) => combinedMap.set(i.id, i));
+            cloudItems.forEach((i) => combinedMap.set(Number(i.id), i));
+            currentList.forEach((i) => combinedMap.set(Number(i.id), i));
             const merged = Array.from(combinedMap.values()).sort(
               (a, b) => (b.added_at || 0) - (a.added_at || 0)
             );
@@ -108,20 +108,24 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const toggleWatchlist = useCallback((item: MediaItem) => {
+    if (!item || item.id === undefined || item.id === null) return;
+    const numericId = Number(item.id);
+    if (isNaN(numericId)) return;
+
     setWatchlist((prev) => {
-      const isSaved = prev.some((i) => i.id === item.id);
+      const isSaved = prev.some((i) => Number(i.id) === numericId);
       let updated: WatchlistItem[];
 
       if (isSaved) {
-        updated = prev.filter((i) => i.id !== item.id);
+        updated = prev.filter((i) => Number(i.id) !== numericId);
         if (user && isSupabaseConfigured()) {
-          cloudWatchlistService.removeFromWatchlist(user.id, item.id);
+          cloudWatchlistService.removeFromWatchlist(user.id, numericId);
         }
       } else {
         const mediaType = item.media_type || (item.first_air_date ? 'tv' : 'movie');
         const title = item.title || item.name || 'Untitled';
         const newItem: WatchlistItem = {
-          id: item.id,
+          id: numericId,
           title,
           poster_path: item.poster_path,
           backdrop_path: item.backdrop_path,
@@ -130,7 +134,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
           release_date: item.release_date || item.first_air_date,
           added_at: Date.now(),
         };
-        updated = [newItem, ...prev];
+        updated = [newItem, ...prev.filter((i) => Number(i.id) !== numericId)];
 
         if (user && isSupabaseConfigured()) {
           cloudWatchlistService.addToWatchlist(user.id, newItem);
@@ -146,15 +150,19 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     });
   }, [currentKey, user]);
 
-  const isInWatchlist = useCallback((id: number) => {
-    return watchlist.some((i) => i.id === id);
+  const isInWatchlist = useCallback((id: number | string) => {
+    if (id === undefined || id === null) return false;
+    const numericId = Number(id);
+    return watchlist.some((i) => Number(i.id) === numericId);
   }, [watchlist]);
 
-  const removeFromWatchlist = useCallback((id: number) => {
+  const removeFromWatchlist = useCallback((id: number | string) => {
+    if (id === undefined || id === null) return;
+    const numericId = Number(id);
     setWatchlist((prev) => {
-      const updated = prev.filter((i) => i.id !== id);
+      const updated = prev.filter((i) => Number(i.id) !== numericId);
       if (user && isSupabaseConfigured()) {
-        cloudWatchlistService.removeFromWatchlist(user.id, id);
+        cloudWatchlistService.removeFromWatchlist(user.id, numericId);
       }
       try {
         localStorage.setItem(currentKey, JSON.stringify(updated));
