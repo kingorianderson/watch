@@ -40,7 +40,7 @@ export interface TransactionStatusResponse {
 const DEFAULT_AUTH_TOKEN =
   'Basic YVVTY09PN0hUemk4NmV3a3dYRnA6WjZXQWdQZnk1NkFmckQ1SUhzSE5HTWcyUEkxMDVMNjRJb0JKMUlvdg==';
 const DEFAULT_ACCOUNT_ID = '11932';
-const DEFAULT_CHANNEL_ID = '11932';
+const DEFAULT_CHANNEL_ID = '12072';
 
 export function getPayHeroConfig(): PayHeroConfig {
   const authToken =
@@ -57,7 +57,7 @@ export function getPayHeroConfig(): PayHeroConfig {
     accountId: import.meta.env.VITE_PAYHERO_ACCOUNT_ID || DEFAULT_ACCOUNT_ID,
     authToken: authToken.startsWith('Basic ') ? authToken : `Basic ${authToken}`,
     channelId: import.meta.env.VITE_PAYHERO_CHANNEL_ID || DEFAULT_CHANNEL_ID,
-    lipwaLink: import.meta.env.VITE_PAYHERO_LIPWA_LINK || 'https://lipwa.link/11932',
+    lipwaLink: import.meta.env.VITE_PAYHERO_LIPWA_LINK || 'https://lipwa.link/12072',
   };
 }
 
