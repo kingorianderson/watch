@@ -67,7 +67,7 @@ export default function Navbar() {
   const { watchlist } = useWatchlist();
   const { getLastWatched } = useWatchHistory();
 
-  // Auto-hide navbar after 30 seconds of inactivity on the Watch page
+  // Auto-hide navbar after 5 seconds of inactivity on the Watch page
   useEffect(() => {
     if (!isWatchPage) {
       setIsIdle(false);
@@ -85,7 +85,7 @@ export default function Navbar() {
 
       idleTimeout = setTimeout(() => {
         setIsIdle(true);
-      }, 30000); // 30 seconds
+      }, 5000); // 5 seconds
     };
 
     resetIdleTimer();

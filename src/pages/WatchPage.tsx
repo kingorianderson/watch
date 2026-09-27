@@ -57,7 +57,7 @@ export default function WatchPage() {
   const getLastWatchedRef = useRef(getLastWatched);
   getLastWatchedRef.current = getLastWatched;
 
-  // Auto-cinema mode after 30 seconds of inactivity when focused on the player
+  // Auto-cinema mode after 5 seconds of inactivity when focused on the player
   useEffect(() => {
     let idleTimer: NodeJS.Timeout;
 
@@ -66,7 +66,7 @@ export default function WatchPage() {
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
         setIsIdle(true);
-      }, 30000); // 30 seconds
+      }, 5000); // 5 seconds
     };
 
     resetIdle();
