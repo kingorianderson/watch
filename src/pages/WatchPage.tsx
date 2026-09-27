@@ -58,6 +58,10 @@ export default function WatchPage() {
   const getLastWatchedRef = useRef(getLastWatched);
   getLastWatchedRef.current = getLastWatched;
 
+  const isCinemaMode = isIdle && isVideoInFocus;
+  const isCinemaModeRef = useRef(isCinemaMode);
+  isCinemaModeRef.current = isCinemaMode;
+
   // Auto-cinema mode after 5 seconds of inactivity when at least 75% of the video is visible in the viewport
   useEffect(() => {
     let idleTimer: NodeJS.Timeout;
@@ -93,6 +97,8 @@ export default function WatchPage() {
     checkVisibility();
 
     const handleScroll = () => {
+      // Don't let layout changes during cinema activation break idle state
+      if (isCinemaModeRef.current) return;
       checkVisibility();
       resetIdle();
     };
@@ -127,20 +133,6 @@ export default function WatchPage() {
       window.removeEventListener('resize', handleResize);
     };
   }, []);
-
-  const isCinemaMode = isIdle && isVideoInFocus;
-
-  // Lock body scroll during cinema mode
-  useEffect(() => {
-    if (isCinemaMode) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isCinemaMode]);
 
   // If user visits /watch/tv/:id without season/episode in URL, resume last watched season/episode
   useEffect(() => {

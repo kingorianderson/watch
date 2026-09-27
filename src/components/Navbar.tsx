@@ -98,7 +98,6 @@ export default function Navbar() {
       'touchend',
       'wheel',
       'keydown',
-      'scroll',
       'pointermove',
     ];
 
