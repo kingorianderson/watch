@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Heart,
@@ -6,12 +6,21 @@ import {
   Sparkles,
   Zap,
   CheckCircle2,
-  CreditCard,
   Smartphone,
+  RotateCw,
+  AlertCircle,
+  ExternalLink,
+  ChevronRight,
+  HelpCircle,
+  Lock,
 } from 'lucide-react';
-// @ts-ignore
-import PaystackPop from '@paystack/inline-js';
 import { useAuth } from '../context/AuthContext';
+import {
+  sendPayHeroStkPush,
+  checkPayHeroTransactionStatus,
+  normalizeKenyanPhone,
+  getPayHeroConfig,
+} from '../services/payheroService';
 
 export function openSupportModal() {
   window.dispatchEvent(new CustomEvent('open-support-modal'));
@@ -23,10 +32,12 @@ export function closeSupportModal() {
 
 const PRESET_AMOUNTS = [
   { amount: 100, label: 'KES 100', subtitle: '☕ Coffee (~$1)' },
-  { amount: 250, label: 'KES 250', subtitle: '🍿 Movie (~$2)' },
-  { amount: 500, label: 'KES 500', subtitle: '⚡ Booster (~$4)', popular: true },
+  { amount: 250, label: 'KES 250', subtitle: '🍿 Movie Night (~$2)' },
+  { amount: 500, label: 'KES 500', subtitle: '⚡ Server Booster (~$4)', popular: true },
   { amount: 1000, label: 'KES 1,000', subtitle: '👑 Super Fan (~$8)' },
 ];
+
+const SAVED_PHONE_KEY = 'watchd_payhero_phone';
 
 export default function SupportModal() {
   const { user } = useAuth();
@@ -34,19 +45,38 @@ export default function SupportModal() {
   const [selectedAmount, setSelectedAmount] = useState<number>(500);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [isCustom, setIsCustom] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [loadingPaystack, setLoadingPaystack] = useState(false);
 
-  const paystackKey =
-    import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ||
-    'pk_live_da3ed2fbbd176b1af5135e26941bf9cbfdad637a';
+  // Phone state
+  const [phone, setPhone] = useState<string>(() => {
+    return localStorage.getItem(SAVED_PHONE_KEY) || '';
+  });
+
+  // Flow states: 'form' | 'prompt_sent' | 'success' | 'failed'
+  const [step, setStep] = useState<'form' | 'prompt_sent' | 'success' | 'failed'>('form');
+  const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
+  const [activeReference, setActiveReference] = useState<string>('');
+  const [successData, setSuccessData] = useState<{ reference?: string; amount?: number }>({});
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [countdown, setCountdown] = useState<number>(60);
+
+  const pollingTimerRef = useRef<any>(null);
+  const countdownTimerRef = useRef<any>(null);
+
+  const config = getPayHeroConfig();
 
   useEffect(() => {
     const handleOpen = () => {
       setIsOpen(true);
-      setPaymentSuccess(false);
+      setStep('form');
+      setErrorMessage('');
+      setStatusMessage('');
+      setIsLoading(false);
     };
-    const handleClose = () => setIsOpen(false);
+    const handleClose = () => {
+      setIsOpen(false);
+      clearAllTimers();
+    };
 
     window.addEventListener('open-support-modal', handleOpen);
     window.addEventListener('close-support-modal', handleClose);
@@ -54,97 +84,147 @@ export default function SupportModal() {
     return () => {
       window.removeEventListener('open-support-modal', handleOpen);
       window.removeEventListener('close-support-modal', handleClose);
+      clearAllTimers();
     };
   }, []);
+
+  const clearAllTimers = () => {
+    if (pollingTimerRef.current) {
+      clearInterval(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+  };
 
   if (!isOpen) return null;
 
   const currentAmount = isCustom ? Number(customAmount) || 0 : selectedAmount;
+  const { isValid: isPhoneValid, local: formattedPhone } = normalizeKenyanPhone(phone);
 
-  const handlePaystackCheckout = (e: React.FormEvent) => {
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setPhone(val);
+    setErrorMessage('');
+  };
+
+  const startPollingStatus = (ref: string, amountToConfirm: number) => {
+    clearAllTimers();
+    setCountdown(60);
+
+    countdownTimerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearAllTimers();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    let attempts = 0;
+    pollingTimerRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const result = await checkPayHeroTransactionStatus(ref);
+        if (result.status === 'SUCCESS') {
+          clearAllTimers();
+          setSuccessData({
+            reference: result.providerReference || ref,
+            amount: result.amount || amountToConfirm,
+          });
+          setStep('success');
+        } else if (result.status === 'FAILED') {
+          clearAllTimers();
+          setErrorMessage(result.message || 'Payment was cancelled or failed.');
+          setStep('failed');
+        }
+      } catch (e) {
+        // Continue polling
+      }
+
+      if (attempts >= 30) {
+        clearAllTimers();
+      }
+    }, 2500);
+  };
+
+  const handleInitiateStk = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentAmount || currentAmount < 50) {
-      alert('Please enter an amount of at least KES 50');
+    setErrorMessage('');
+
+    if (!currentAmount || currentAmount < 1) {
+      setErrorMessage('Please enter an amount of at least KES 10');
       return;
     }
 
-    const emailToUse = (user?.email || `supporter_${Date.now()}@gmail.com`).trim();
-
-    setLoadingPaystack(true);
-
-    try {
-      const paystack = new PaystackPop();
-      paystack.newTransaction({
-        key: paystackKey,
-        email: emailToUse,
-        amount: Math.round(currentAmount * 100),
-        currency: 'KES',
-        channels: ['card', 'mobile_money'],
-        metadata: {
-          custom_fields: [
-            {
-              display_name: 'Supporter Name',
-              variable_name: 'supporter_name',
-              value: user?.name || 'Supporter',
-            },
-            {
-              display_name: 'Service',
-              variable_name: 'service_type',
-              value: 'Digital Services & Creative Support',
-            },
-          ],
-        },
-        onSuccess: (transaction: any) => {
-          setLoadingPaystack(false);
-          setPaymentSuccess(true);
-          console.log('Payment successful reference:', transaction.reference);
-        },
-        onCancel: () => {
-          setLoadingPaystack(false);
-        },
-      });
-    } catch (err) {
-      console.error('Failed to open Paystack popup:', err);
-      setLoadingPaystack(false);
-      alert('Could not initialize payment gateway. Please try again.');
+    if (!isPhoneValid) {
+      setErrorMessage('Please enter a valid Safaricom / Airtel phone number (e.g. 0712345678 or 0112345678)');
+      return;
     }
+
+    // Save phone for future convenience
+    try {
+      localStorage.setItem(SAVED_PHONE_KEY, phone.trim());
+    } catch {
+      // Ignore
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Connecting to PayHero M-Pesa gateway...');
+
+    const res = await sendPayHeroStkPush({
+      amount: currentAmount,
+      phone: phone.trim(),
+      customerName: user?.name || 'WATCHD Supporter',
+    });
+
+    setIsLoading(false);
+
+    if (res.success && res.reference) {
+      setActiveReference(res.reference);
+      setStep('prompt_sent');
+      startPollingStatus(res.reference, currentAmount);
+    } else {
+      // If direct STK API returned an error, show clear details and option to retry or use Lipwa link
+      setErrorMessage(
+        res.message ||
+          'Could not dispatch STK push. You can also support via PayHero Lipwa link.'
+      );
+    }
+  };
+
+  const handleManualConfirm = () => {
+    setSuccessData({
+      reference: activeReference || `MPESA_${Date.now()}`,
+      amount: currentAmount,
+    });
+    setStep('success');
+    clearAllTimers();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
       <div className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden">
-        {/* Background ambient glow */}
+        {/* Ambient background glows */}
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-teal-600/15 rounded-full blur-3xl pointer-events-none" />
 
         {/* Close Button */}
         <button
-          onClick={() => setIsOpen(false)}
-          className="absolute top-4 right-4 p-2 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition cursor-pointer"
+          onClick={() => {
+            setIsOpen(false);
+            clearAllTimers();
+          }}
+          className="absolute top-4 right-4 p-2 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition cursor-pointer z-10"
         >
           <X className="w-5 h-5" />
         </button>
 
-        {/* Success Screen */}
-        {paymentSuccess ? (
-          <div className="py-8 text-center space-y-4 animate-in zoom-in-95">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
-              <CheckCircle2 className="w-10 h-10 text-emerald-400" />
-            </div>
-            <div className="space-y-1.5">
-              <h3 className="text-2xl font-black text-white">Thank You for Your Support! ❤️</h3>
-              <p className="text-sm text-zinc-300 max-w-sm mx-auto">
-                Your payment of <span className="text-emerald-400 font-bold font-mono">KES {currentAmount}</span> was successful. You're helping keep WATCHD fast, free & buffer-free for everyone!
-              </p>
-            </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="mt-4 px-6 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-sm transition cursor-pointer"
-            >
-              Continue Streaming
-            </button>
-          </div>
-        ) : (
+        {/* STEP 1: FORM INPUT */}
+        {step === 'form' && (
           <>
             {/* Header */}
             <div className="text-center space-y-2 mb-6">
@@ -155,13 +235,12 @@ export default function SupportModal() {
                 Support WATCH<span className="text-red-500 font-bold">HD</span>
               </h2>
               <p className="text-xs sm:text-sm text-zinc-400 max-w-sm mx-auto">
-                Keep WATCHD 100% free with fast 4K streaming servers & no subscription paywalls!
+                Powered by <strong className="text-emerald-400">PayHero Kenya</strong>. Direct Safaricom M-Pesa STK push with zero extra charges!
               </p>
             </div>
 
-            {/* Direct Paystack Checkout Form */}
-            <form onSubmit={handlePaystackCheckout} className="space-y-4">
-              {/* Preset Amount Grid */}
+            <form onSubmit={handleInitiateStk} className="space-y-4">
+              {/* Preset Amounts Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {PRESET_AMOUNTS.map((item) => {
                   const isSelected = !isCustom && selectedAmount === item.amount;
@@ -172,6 +251,7 @@ export default function SupportModal() {
                       onClick={() => {
                         setSelectedAmount(item.amount);
                         setIsCustom(false);
+                        setErrorMessage('');
                       }}
                       className={`relative p-3 rounded-2xl border text-center transition cursor-pointer ${
                         isSelected
@@ -191,12 +271,15 @@ export default function SupportModal() {
                 })}
               </div>
 
-              {/* Custom Amount Field */}
+              {/* Custom Amount Button / Input */}
               <div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsCustom(!isCustom)}
+                    onClick={() => {
+                      setIsCustom(!isCustom);
+                      setErrorMessage('');
+                    }}
                     className={`text-xs font-semibold px-3.5 py-2 rounded-xl border transition cursor-pointer ${
                       isCustom
                         ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
@@ -206,7 +289,7 @@ export default function SupportModal() {
                     Custom Amount
                   </button>
                   {isCustom && (
-                    <div className="flex-1 relative">
+                    <div className="flex-1 relative animate-in fade-in">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-zinc-500 font-bold">
                         KES
                       </span>
@@ -223,43 +306,90 @@ export default function SupportModal() {
                 </div>
               </div>
 
-              {/* Payment Methods Badges */}
-              <div className="flex items-center justify-center gap-3 text-xs text-zinc-400 py-1">
-                <span className="flex items-center gap-1">
-                  <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Visa / Mastercard</span>
-                </span>
-                <span className="text-zinc-600">•</span>
-                <span className="flex items-center gap-1">
-                  <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>M-Pesa STK Push</span>
-                </span>
+              {/* M-Pesa Phone Input Field */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>M-Pesa Phone Number</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-mono font-medium">
+                    Safaricom / Airtel
+                  </span>
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
+                    <span className="text-sm">🇰🇪</span>
+                    <span className="text-xs font-mono text-zinc-400 font-bold">+254</span>
+                    <div className="h-3.5 w-px bg-zinc-700 mx-0.5" />
+                  </div>
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    placeholder="0712 345 678"
+                    value={phone}
+                    onChange={handlePhoneChange}
+                    className="w-full bg-zinc-950 border border-zinc-700 rounded-2xl pl-24 pr-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 font-mono transition"
+                    required
+                  />
+                </div>
+                <p className="text-[11px] text-zinc-500">
+                  Enter your number to receive an instant PIN prompt on your phone.
+                </p>
               </div>
 
-              {/* Submit Checkout Button */}
+              {/* Error Alert */}
+              {errorMessage && (
+                <div className="p-3 rounded-xl bg-red-950/60 border border-red-800/80 text-red-200 text-xs flex items-start gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <span>{errorMessage}</span>
+                    {config.lipwaLink && (
+                      <div className="mt-1.5">
+                        <a
+                          href={`${config.lipwaLink}?amount=${currentAmount}&phone=${formattedPhone || phone}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:underline font-bold"
+                        >
+                          <span>Open PayHero Lipwa Link Directly</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Submit STK Button */}
               <button
                 type="submit"
-                disabled={loadingPaystack || currentAmount <= 0}
-                className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/25 hover:scale-[1.01] active:scale-95 transition cursor-pointer disabled:opacity-50"
+                disabled={isLoading || currentAmount <= 0}
+                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/25 hover:scale-[1.01] active:scale-95 transition cursor-pointer disabled:opacity-50"
               >
-                <Zap className="w-4 h-4 fill-white" />
-                <span>
-                  {loadingPaystack
-                    ? 'Connecting to Paystack...'
-                    : `Pay KES ${currentAmount || 0} via Card / M-Pesa`}
-                </span>
+                {isLoading ? (
+                  <>
+                    <RotateCw className="w-4 h-4 animate-spin" />
+                    <span>{statusMessage || 'Sending M-Pesa Prompt...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 fill-white" />
+                    <span>Pay KES {currentAmount || 0} via M-Pesa STK</span>
+                  </>
+                )}
               </button>
 
               <div className="text-center text-[11px] text-zinc-500">
-                Instant popup • Choose Visa, Mastercard, or M-Pesa
+                🔒 Safe & Instant • Powered by PayHero Africa
               </div>
             </form>
 
-            {/* Security Footer */}
+            {/* Footer Trust Badges */}
             <div className="mt-6 pt-4 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-500">
               <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>256-Bit SSL Encrypted Checkout</span>
+                <span>Encrypted PayHero Gateway</span>
               </div>
               <div className="flex items-center gap-1 text-amber-400 font-medium">
                 <Sparkles className="w-3.5 h-3.5" />
@@ -267,6 +397,151 @@ export default function SupportModal() {
               </div>
             </div>
           </>
+        )}
+
+        {/* STEP 2: PROMPT SENT (AWAITING M-PESA PIN) */}
+        {step === 'prompt_sent' && (
+          <div className="py-4 text-center space-y-5 animate-in zoom-in-95">
+            {/* Animated Phone Graphic */}
+            <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping opacity-60" />
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-xl shadow-emerald-600/30">
+                <Smartphone className="w-8 h-8 animate-bounce" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold font-mono">
+                STK PROMPT SENT
+              </span>
+              <h3 className="text-xl sm:text-2xl font-black text-white mt-2">
+                Check Your Phone
+              </h3>
+              <p className="text-xs sm:text-sm text-zinc-300 max-w-sm mx-auto leading-relaxed">
+                An M-Pesa prompt for{' '}
+                <strong className="text-emerald-400 font-mono">KES {currentAmount}</strong> has been
+                sent to <strong className="text-white font-mono">{phone}</strong>.
+              </p>
+            </div>
+
+            <div className="p-3.5 bg-zinc-950/80 border border-zinc-800 rounded-2xl text-left space-y-2 max-w-sm mx-auto">
+              <div className="flex items-center gap-2 text-xs text-zinc-300 font-semibold">
+                <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Instructions to complete payment:</span>
+              </div>
+              <ol className="text-xs text-zinc-400 list-decimal list-inside space-y-1">
+                <li>Unlock your phone screen</li>
+                <li>Enter your 4-digit M-Pesa PIN in the prompt</li>
+                <li>Tap <strong>Send / OK</strong></li>
+              </ol>
+            </div>
+
+            {/* Polling indicator & countdown */}
+            <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
+              <RotateCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+              <span>Awaiting confirmation ({countdown}s)...</span>
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={handleManualConfirm}
+                className="w-full py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-semibold transition cursor-pointer"
+              >
+                I have entered my PIN • Complete
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  clearAllTimers();
+                  setStep('form');
+                }}
+                className="text-xs text-zinc-500 hover:text-zinc-300 transition"
+              >
+                Change Phone Number or Amount
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: SUCCESS CONFIRMATION */}
+        {step === 'success' && (
+          <div className="py-6 text-center space-y-4 animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
+              <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-2xl font-black text-white">Thank You for Your Support! ❤️</h3>
+              <p className="text-sm text-zinc-300 max-w-sm mx-auto">
+                Your payment of{' '}
+                <span className="text-emerald-400 font-bold font-mono">
+                  KES {successData.amount || currentAmount}
+                </span>{' '}
+                via PayHero M-Pesa was received.
+              </p>
+            </div>
+
+            {successData.reference && (
+              <div className="px-3 py-1.5 bg-zinc-950/80 rounded-xl border border-zinc-800 inline-block text-[11px] font-mono text-zinc-400">
+                Ref: {successData.reference}
+              </div>
+            )}
+
+            <div className="pt-2">
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  clearAllTimers();
+                }}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm transition cursor-pointer shadow-lg shadow-emerald-600/30"
+              >
+                Continue Streaming
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: FAILED OR CANCELLED */}
+        {step === 'failed' && (
+          <div className="py-6 text-center space-y-4 animate-in zoom-in-95">
+            <div className="w-14 h-14 rounded-full bg-red-500/20 border border-red-500/40 text-red-400 flex items-center justify-center mx-auto shadow-lg shadow-red-500/20">
+              <AlertCircle className="w-8 h-8 text-red-400" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-xl font-bold text-white">Transaction Incomplete</h3>
+              <p className="text-xs sm:text-sm text-zinc-300 max-w-sm mx-auto">
+                {errorMessage || 'The payment was cancelled or timed out before PIN entry.'}
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+              <button
+                onClick={() => {
+                  setStep('form');
+                  setErrorMessage('');
+                }}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer"
+              >
+                Try Again
+              </button>
+
+              {config.lipwaLink && (
+                <a
+                  href={`${config.lipwaLink}?amount=${currentAmount}&phone=${formattedPhone || phone}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                >
+                  <span>Pay via Lipwa Link</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
