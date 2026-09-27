@@ -49,7 +49,8 @@ export default function WatchPage() {
   const [copied, setCopied] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [isIdle, setIsIdle] = useState(false);
-  const [isNearTop, setIsNearTop] = useState(true);
+  const [isVideoInFocus, setIsVideoInFocus] = useState(true);
+  const playerContainerRef = useRef<HTMLDivElement>(null);
 
   const { addToHistory, updateProgress, getLastWatched, getEpisodeProgress } = useWatchHistory();
   const { toggleWatchlist, isInWatchlist } = useWatchlist();
@@ -57,9 +58,28 @@ export default function WatchPage() {
   const getLastWatchedRef = useRef(getLastWatched);
   getLastWatchedRef.current = getLastWatched;
 
-  // Auto-cinema mode after 5 seconds of inactivity when focused on the player
+  // Auto-cinema mode after 5 seconds of inactivity when at least 75% of the video is visible in the viewport
   useEffect(() => {
     let idleTimer: NodeJS.Timeout;
+
+    const checkVisibility = () => {
+      if (!playerContainerRef.current) {
+        setIsVideoInFocus(window.scrollY <= 300);
+        return;
+      }
+      const rect = playerContainerRef.current.getBoundingClientRect();
+      const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+
+      const visibleTop = Math.max(0, rect.top);
+      const visibleBottom = Math.min(windowHeight, rect.bottom);
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+      const totalHeight = rect.height || 1;
+
+      const visibleRatio = visibleHeight / totalHeight;
+      // At least 75% (0.75) visible: user is actively watching -> allow cinema mode
+      // Less than 75% visible: user is reading info/episodes/cast below -> disable cinema mode
+      setIsVideoInFocus(visibleRatio >= 0.75);
+    };
 
     const resetIdle = () => {
       setIsIdle(false);
@@ -70,10 +90,15 @@ export default function WatchPage() {
     };
 
     resetIdle();
+    checkVisibility();
 
     const handleScroll = () => {
-      setIsNearTop(window.scrollY <= 300);
+      checkVisibility();
       resetIdle();
+    };
+
+    const handleResize = () => {
+      checkVisibility();
     };
 
     const activityEvents: (keyof WindowEventMap)[] = [
@@ -91,6 +116,7 @@ export default function WatchPage() {
       window.addEventListener(evt, resetIdle, { passive: true });
     });
     window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleResize, { passive: true });
 
     return () => {
       clearTimeout(idleTimer);
@@ -98,10 +124,11 @@ export default function WatchPage() {
         window.removeEventListener(evt, resetIdle);
       });
       window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
     };
   }, []);
 
-  const isCinemaMode = isIdle && isNearTop;
+  const isCinemaMode = isIdle && isVideoInFocus;
 
   // Lock body scroll during cinema mode
   useEffect(() => {
@@ -371,21 +398,23 @@ export default function WatchPage() {
         </div>
 
         {/* Video Player */}
-        <VideoPlayer
-          tmdbId={id}
-          type={mediaType}
-          season={currentSeason}
-          episode={currentEpisode}
-          title={title}
-          releaseYear={year ? Number(year) : undefined}
-          startAt={initialStartAt}
-          onProgressUpdate={(prog, dur) => {
-            updateProgress(Number(id), mediaType, prog, dur, currentSeason, currentEpisode);
-          }}
-          nextEpisodeInfo={nextEpisodeInfo}
-          onPlayNextEpisode={handleNextEpisode}
-          isCinemaMode={isCinemaMode}
-        />
+        <div ref={playerContainerRef} className="w-full">
+          <VideoPlayer
+            tmdbId={id}
+            type={mediaType}
+            season={currentSeason}
+            episode={currentEpisode}
+            title={title}
+            releaseYear={year ? Number(year) : undefined}
+            startAt={initialStartAt}
+            onProgressUpdate={(prog, dur) => {
+              updateProgress(Number(id), mediaType, prog, dur, currentSeason, currentEpisode);
+            }}
+            nextEpisodeInfo={nextEpisodeInfo}
+            onPlayNextEpisode={handleNextEpisode}
+            isCinemaMode={isCinemaMode}
+          />
+        </div>
 
         {/* Surrounding Details & Navigation: Soft Cinema Dim & Blur */}
         <div

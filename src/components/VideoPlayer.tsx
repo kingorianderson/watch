@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Server,
   RefreshCw,
@@ -303,6 +304,24 @@ export default function VideoPlayer({
               : ''
           }`}
         >
+          {/* Faded Translucent Brand Logo Watermark in Cinema Mode */}
+          {isCinemaMode && (
+            <div className="absolute top-4 sm:top-6 right-4 sm:right-6 z-40 flex items-center pointer-events-auto select-none opacity-25 hover:opacity-85 transition-opacity duration-300">
+              <Link
+                to="/"
+                className="flex items-center gap-2 group cursor-pointer drop-shadow-lg"
+                title="WATCHD - Return Home"
+              >
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 flex items-center justify-center shadow-md group-hover:scale-105 transition duration-200">
+                  <Play className="w-3 h-3 text-white fill-white ml-0.5" />
+                </div>
+                <span className="text-sm sm:text-base font-black tracking-tight text-white drop-shadow flex items-center">
+                  WATC<span className="text-red-500 font-bold ml-0.5">HD</span>
+                </span>
+              </Link>
+            </div>
+          )}
+
           {/* Loading Spinner Indicator for Iframe mode */}
           {isLoading && !currentServer.isNativeHls && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/90 backdrop-blur-sm pointer-events-none">
