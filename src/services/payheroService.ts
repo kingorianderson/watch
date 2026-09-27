@@ -1,6 +1,6 @@
 /**
- * PayHero Kenya (M-Pesa) Payment Service for WATCHD
- * Handles M-Pesa STK push, status checking, phone normalization, and Lipwa links.
+ * PayHero Kenya (M-Pesa) Direct Payment Service for WATCHD
+ * Direct M-Pesa STK push & real-time polling with 0 external popups or iframes.
  */
 
 export interface PayHeroConfig {
@@ -57,7 +57,7 @@ export function getPayHeroConfig(): PayHeroConfig {
     accountId: import.meta.env.VITE_PAYHERO_ACCOUNT_ID || DEFAULT_ACCOUNT_ID,
     authToken: authToken.startsWith('Basic ') ? authToken : `Basic ${authToken}`,
     channelId: import.meta.env.VITE_PAYHERO_CHANNEL_ID || DEFAULT_CHANNEL_ID,
-    lipwaLink: import.meta.env.VITE_PAYHERO_LIPWA_LINK || 'https://lipwa.link/12072',
+    lipwaLink: import.meta.env.VITE_PAYHERO_LIPWA_LINK || 'https://lipwa.link/11932',
   };
 }
 
@@ -91,7 +91,7 @@ export function normalizeKenyanPhone(input: string): { local: string; internatio
 }
 
 /**
- * Initiates an M-Pesa STK Push payment prompt to the supporter's phone via PayHero API
+ * Initiates direct M-Pesa STK Push payment prompt to the supporter's phone via PayHero API
  */
 export async function sendPayHeroStkPush({
   amount,
@@ -111,7 +111,8 @@ export async function sendPayHeroStkPush({
 
   const roundedAmount = Math.max(1, Math.round(amount));
   const trackingRef = reference || `WATCHD_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-  const channelNum = Number(config.channelId) || 11932;
+  const channelNum = Number(config.channelId) || 12072;
+  const accountId = config.accountId || DEFAULT_ACCOUNT_ID;
 
   const payload = {
     amount: roundedAmount,
@@ -120,57 +121,65 @@ export async function sendPayHeroStkPush({
     provider: 'm-pesa',
     external_reference: trackingRef,
     customer_name: customerName,
-    callback_url: `${window.location.origin}/api/payhero/callback`,
   };
 
-  try {
-    const res = await fetch('https://backend.payhero.co.ke/api/v2/payments', {
-      method: 'POST',
+  // Primary: Direct Account Payments Endpoint (Tested 201 Created)
+  // Fallback: v2 Payments with Basic Auth
+  const endpoints: Array<{ url: string; headers: Record<string, string> }> = [
+    {
+      url: `https://backend.payhero.co.ke/api/account/${accountId}/payments`,
+      headers: { 'Content-Type': 'application/json' },
+    },
+    {
+      url: 'https://backend.payhero.co.ke/api/v2/payments',
       headers: {
         Authorization: config.authToken,
         'Content-Type': 'application/json',
-        'X-AUTH-ACCOUNT-ID': String(config.accountId),
+        'X-AUTH-ACCOUNT-ID': String(accountId),
       },
-      body: JSON.stringify(payload),
-    });
+    },
+  ];
 
-    const data = await res.json().catch(() => null);
+  for (const ep of endpoints) {
+    try {
+      const res = await fetch(ep.url, {
+        method: 'POST',
+        headers: ep.headers,
+        body: JSON.stringify(payload),
+      });
 
-    if (res.ok && data) {
-      if (data.success !== false && (data.status === 'QUEUED' || data.success === true || data.reference)) {
+      const data = await res.json().catch(() => null);
+
+      if ((res.status === 200 || res.status === 201) && data) {
+        if (data.success !== false && (data.status === 'QUEUED' || data.success === true || data.reference)) {
+          return {
+            success: true,
+            status: data.status || 'QUEUED',
+            reference: data.reference || trackingRef,
+            checkoutRequestId: data.CheckoutRequestID || data.checkout_request_id,
+            message: 'STK prompt sent to your phone. Please enter your M-Pesa PIN.',
+          };
+        }
+      }
+
+      if (data?.message && data.message !== 'Unable to perform request') {
         return {
-          success: true,
-          status: data.status || 'QUEUED',
-          reference: data.reference || trackingRef,
-          checkoutRequestId: data.CheckoutRequestID || data.checkout_request_id,
-          message: 'STK prompt sent to your phone. Please enter your M-Pesa PIN.',
+          success: false,
+          status: 'FAILED',
+          reference: trackingRef,
+          message: data.message,
         };
       }
+    } catch (err) {
+      console.warn(`PayHero attempt on ${ep.url} failed:`, err);
     }
-
-    // Handle unsuccessful response
-    let errorMessage = data?.message || data?.error;
-    if (errorMessage === 'Unable to perform request' || res.status === 401) {
-      errorMessage =
-        'PayHero requires a small Service Wallet balance (KES 50+) in your PayHero dashboard to dispatch automated M-Pesa STK prompts.';
-    } else if (!errorMessage) {
-      errorMessage = `Payment gateway error (${res.status}). Please check channel configuration.`;
-    }
-
-    return {
-      success: false,
-      status: 'FAILED',
-      reference: trackingRef,
-      message: errorMessage,
-    };
-  } catch (err: any) {
-    console.error('PayHero STK Push request failed:', err);
-    return {
-      success: false,
-      status: 'ERROR',
-      message: err?.message || 'Network connection to PayHero failed. Please check your internet.',
-    };
   }
+
+  return {
+    success: false,
+    status: 'ERROR',
+    message: 'Could not send M-Pesa prompt. Please check your phone number and try again.',
+  };
 }
 
 /**
@@ -183,17 +192,13 @@ export async function checkPayHeroTransactionStatus(
     return { success: false, status: 'UNKNOWN' };
   }
 
-  const config = getPayHeroConfig();
-
   try {
     const res = await fetch(
-      `https://backend.payhero.co.ke/api/v2/transaction-status?reference=${encodeURIComponent(reference)}`,
+      `https://backend.payhero.co.ke/api/transaction-status?reference=${encodeURIComponent(reference)}`,
       {
         method: 'GET',
         headers: {
-          Authorization: config.authToken,
           'Content-Type': 'application/json',
-          'X-AUTH-ACCOUNT-ID': String(config.accountId),
         },
       }
     );
@@ -235,4 +240,3 @@ export async function checkPayHeroTransactionStatus(
     };
   }
 }
-

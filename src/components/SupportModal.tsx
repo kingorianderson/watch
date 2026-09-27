@@ -16,7 +16,6 @@ import {
   sendPayHeroStkPush,
   checkPayHeroTransactionStatus,
   normalizeKenyanPhone,
-  getPayHeroConfig,
 } from '../services/payheroService';
 
 export function openSupportModal() {
@@ -35,32 +34,6 @@ const PRESET_AMOUNTS = [
 ];
 
 const SAVED_PHONE_KEY = 'watchd_payhero_phone';
-
-function loadPayHeroSdk(): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === 'undefined') {
-      resolve();
-      return;
-    }
-    if ((window as any).PayHero) {
-      resolve();
-      return;
-    }
-    const existing = document.getElementById('payhero-sdk-script');
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = 'payhero-sdk-script';
-    script.src = 'https://applet.payherokenya.com/cdn/button_sdk.js?v=3.1';
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => resolve();
-    document.body.appendChild(script);
-  });
-}
 
 export default function SupportModal() {
   const { user } = useAuth();
@@ -85,48 +58,6 @@ export default function SupportModal() {
 
   const pollingTimerRef = useRef<any>(null);
   const countdownTimerRef = useRef<any>(null);
-
-  const config = getPayHeroConfig();
-
-  // Load SDK and set up message listener for PayHero events
-  useEffect(() => {
-    loadPayHeroSdk().then(() => {
-      try {
-        if ((window as any).PayHero) {
-          (window as any).PayHero.init({
-            paymentUrl: config.lipwaLink || 'https://lipwa.link/11932',
-            channelID: Number(config.channelId) || 12072,
-            containerId: 'payhero-sdk-anchor',
-            amount: 500,
-            buttonName: 'Pay via M-Pesa',
-            buttonColor: '#059669',
-          });
-        }
-      } catch (err) {
-        console.warn('PayHero SDK init warning:', err);
-      }
-    });
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data && event.data.paymentSuccess) {
-        clearAllTimers();
-        setSuccessData({
-          reference:
-            event.data.providerReference ||
-            event.data.reference ||
-            `PAYHERO_${Date.now()}`,
-          amount: event.data.amount || selectedAmount,
-        });
-        setStep('success');
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-
-    return () => {
-      window.removeEventListener('message', handleMessage);
-    };
-  }, [config.lipwaLink, config.channelId, selectedAmount]);
 
   useEffect(() => {
     const handleOpen = () => {
@@ -165,7 +96,7 @@ export default function SupportModal() {
   if (!isOpen) return null;
 
   const currentAmount = isCustom ? Number(customAmount) || 0 : selectedAmount;
-  const { isValid: isPhoneValid, local: formattedPhone, international: intlPhone } = normalizeKenyanPhone(phone);
+  const { isValid: isPhoneValid } = normalizeKenyanPhone(phone);
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -224,7 +155,7 @@ export default function SupportModal() {
     }
 
     if (!isPhoneValid) {
-      setErrorMessage('Please enter a valid Safaricom / Airtel number (e.g. 0712 345 678)');
+      setErrorMessage('Please enter a valid Safaricom / Airtel number (e.g. 0712 345 678 or 0112 345 678)');
       return;
     }
 
@@ -236,45 +167,26 @@ export default function SupportModal() {
     }
 
     setIsLoading(true);
-    setStatusMessage('Connecting to M-Pesa...');
+    setStatusMessage('Dispatching M-Pesa STK Prompt...');
 
-    // Attempt 1: Direct API STK push
     const res = await sendPayHeroStkPush({
       amount: currentAmount,
       phone: phone.trim(),
       customerName: user?.name || 'WATCHD Supporter',
     });
 
+    setIsLoading(false);
+
     if (res.success && res.reference) {
-      setIsLoading(false);
       setActiveReference(res.reference);
       setStep('prompt_sent');
       startPollingStatus(res.reference, currentAmount);
-      return;
+    } else {
+      setErrorMessage(
+        res.message ||
+          'Could not dispatch M-Pesa STK prompt. Please check your number and try again.'
+      );
     }
-
-    // Attempt 2: Smooth In-App PayHero Modal SDK
-    await loadPayHeroSdk();
-    if ((window as any).PayHero) {
-      setIsLoading(false);
-      try {
-        (window as any).PayHero.pay({
-          amount: currentAmount,
-          phone: formattedPhone || intlPhone || phone,
-          name: user?.name || 'WATCHD Supporter',
-          reference: `WATCHD_${Date.now()}`,
-          channel_id: Number(config.channelId) || 12072,
-        });
-        return;
-      } catch (sdkErr) {
-        console.warn('PayHero SDK launch fallback:', sdkErr);
-      }
-    }
-
-    // Attempt 3: If SDK was blocked by browser, open direct Lipwa Link
-    setIsLoading(false);
-    const targetUrl = `${config.lipwaLink || 'https://lipwa.link/11932'}?amount=${currentAmount}&phone=${intlPhone || formattedPhone || phone}&channel_id=${config.channelId || 12072}`;
-    window.open(targetUrl, '_blank');
   };
 
   const handleManualConfirm = () => {
@@ -288,9 +200,6 @@ export default function SupportModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-      {/* Hidden anchor element for PayHero SDK */}
-      <div id="payhero-sdk-anchor" className="hidden" />
-
       <div className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden">
         {/* Ambient background glows */}
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none" />
@@ -319,7 +228,7 @@ export default function SupportModal() {
                 Support WATCH<span className="text-red-500 font-bold">HD</span>
               </h2>
               <p className="text-xs sm:text-sm text-zinc-400 max-w-sm mx-auto">
-                Powered by <strong className="text-emerald-400">PayHero Kenya</strong>. Direct M-Pesa STK push to keep WATCHD free & fast!
+                Powered by <strong className="text-emerald-400">PayHero Kenya</strong>. Direct Safaricom M-Pesa STK push with zero extra charges!
               </p>
             </div>
 
@@ -418,7 +327,7 @@ export default function SupportModal() {
                   />
                 </div>
                 <p className="text-[11px] text-zinc-500">
-                  Enter your phone number to receive the instant PIN prompt.
+                  Enter your number to receive an instant PIN prompt on your phone.
                 </p>
               </div>
 
@@ -441,7 +350,7 @@ export default function SupportModal() {
                 {isLoading ? (
                   <>
                     <RotateCw className="w-4 h-4 animate-spin" />
-                    <span>{statusMessage || 'Processing Payment...'}</span>
+                    <span>{statusMessage || 'Sending M-Pesa Prompt...'}</span>
                   </>
                 ) : (
                   <>
@@ -464,7 +373,7 @@ export default function SupportModal() {
               </div>
               <div className="flex items-center gap-1 text-amber-400 font-medium">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Instant Settlement</span>
+                <span>Instant Confirmation</span>
               </div>
             </div>
           </>
