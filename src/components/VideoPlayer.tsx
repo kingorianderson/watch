@@ -290,23 +290,30 @@ export default function VideoPlayer({
     <div className="w-full space-y-4">
       {/* Video Player Frame Container */}
       <div
-        className={`relative w-full transition-all duration-500 ease-in-out ${
+        className={`transition-all duration-500 ease-in-out ${
           isCinemaMode
-            ? 'fixed inset-0 z-50 w-screen h-screen rounded-none border-0 ring-0 shadow-none bg-black flex items-center justify-center'
-            : 'aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 ring-1 ring-zinc-800/50'
+            ? 'fixed inset-0 z-50 w-screen h-screen bg-black flex items-center justify-center p-0 m-0 overflow-hidden select-none'
+            : 'relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 ring-1 ring-zinc-800/50'
         }`}
       >
-        {/* Loading Spinner Indicator for Iframe mode */}
-        {isLoading && !currentServer.isNativeHls && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/90 backdrop-blur-sm pointer-events-none">
-            <div className="w-12 h-12 border-4 border-red-500/20 border-t-red-500 rounded-full animate-spin mb-3" />
-            <p className="text-sm font-medium text-zinc-300">Connecting to {currentServer.name}...</p>
-            <div className="flex items-center gap-1.5 text-xs text-amber-400 mt-2 font-medium bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-800/40">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Loading HD Video Feed</span>
+        <div
+          className={`w-full h-full flex items-center justify-center relative ${
+            isCinemaMode
+              ? 'max-h-screen max-w-[calc(100vh*16/9)] aspect-video mx-auto overflow-hidden'
+              : ''
+          }`}
+        >
+          {/* Loading Spinner Indicator for Iframe mode */}
+          {isLoading && !currentServer.isNativeHls && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/90 backdrop-blur-sm pointer-events-none">
+              <div className="w-12 h-12 border-4 border-red-500/20 border-t-red-500 rounded-full animate-spin mb-3" />
+              <p className="text-sm font-medium text-zinc-300">Connecting to {currentServer.name}...</p>
+              <div className="flex items-center gap-1.5 text-xs text-amber-400 mt-2 font-medium bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-800/40">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Loading HD Video Feed</span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Resumed from timestamp banner toast */}
         {showResumeToast && activeStartAt > 15 && (
@@ -456,6 +463,7 @@ export default function VideoPlayer({
             referrerPolicy="origin"
           />
         )}
+        </div>
       </div>
 
       {/* Sleek Collapsible Server Control Bar */}

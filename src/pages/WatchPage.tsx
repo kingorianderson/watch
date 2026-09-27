@@ -103,6 +103,18 @@ export default function WatchPage() {
 
   const isCinemaMode = isIdle && isNearTop;
 
+  // Lock body scroll during cinema mode
+  useEffect(() => {
+    if (isCinemaMode) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isCinemaMode]);
+
   // If user visits /watch/tv/:id without season/episode in URL, resume last watched season/episode
   useEffect(() => {
     if (mediaType === 'tv' && id && (!season || !episode)) {
