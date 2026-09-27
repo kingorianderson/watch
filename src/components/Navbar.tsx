@@ -60,9 +60,59 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const isWatchPage = location.pathname.startsWith('/watch');
+  const [isIdle, setIsIdle] = useState(false);
+
   const { user, openAuthModal } = useAuth();
   const { watchlist } = useWatchlist();
   const { getLastWatched } = useWatchHistory();
+
+  // Auto-hide navbar after 30 seconds of inactivity on the Watch page
+  useEffect(() => {
+    if (!isWatchPage) {
+      setIsIdle(false);
+      return;
+    }
+
+    let idleTimeout: NodeJS.Timeout;
+
+    const resetIdleTimer = () => {
+      setIsIdle(false);
+      clearTimeout(idleTimeout);
+
+      // Do not auto-hide if search dropdown or mobile menus are open
+      if (showSearchDropdown || mobileSearchOpen || mobileMenuOpen) return;
+
+      idleTimeout = setTimeout(() => {
+        setIsIdle(true);
+      }, 30000); // 30 seconds
+    };
+
+    resetIdleTimer();
+
+    const activityEvents: (keyof WindowEventMap)[] = [
+      'mousemove',
+      'mousedown',
+      'touchstart',
+      'touchmove',
+      'touchend',
+      'wheel',
+      'keydown',
+      'scroll',
+      'pointermove',
+    ];
+
+    activityEvents.forEach((evt) => {
+      window.addEventListener(evt, resetIdleTimer, { passive: true });
+    });
+
+    return () => {
+      clearTimeout(idleTimeout);
+      activityEvents.forEach((evt) => {
+        window.removeEventListener(evt, resetIdleTimer);
+      });
+    };
+  }, [isWatchPage, showSearchDropdown, mobileSearchOpen, mobileMenuOpen]);
 
   // Scroll listener
   useEffect(() => {
@@ -221,9 +271,23 @@ export default function Navbar() {
     { name: 'Live Sports', path: '/sports', icon: Trophy, isLive: true },
   ];
 
+  const isNavHidden =
+    isWatchPage &&
+    isIdle &&
+    !showSearchDropdown &&
+    !mobileSearchOpen &&
+    !mobileMenuOpen &&
+    !searchQuery;
+
   return (
     <>
-      <header className="fixed top-3 sm:top-5 inset-x-0 z-40 px-3 sm:px-6 lg:px-8 flex flex-col items-center pointer-events-none transition-all duration-300">
+      <header
+        className={`fixed top-3 sm:top-5 inset-x-0 z-40 px-3 sm:px-6 lg:px-8 flex flex-col items-center pointer-events-none transition-all duration-500 ease-in-out ${
+          isNavHidden
+            ? '-translate-y-28 opacity-0 pointer-events-none'
+            : 'translate-y-0 opacity-100'
+        }`}
+      >
         <nav
           className={`pointer-events-auto w-full max-w-[1550px] rounded-full transition-all duration-300 border shadow-2xl ${
             isScrolled
