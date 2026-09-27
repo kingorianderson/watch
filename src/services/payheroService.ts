@@ -149,10 +149,13 @@ export async function sendPayHeroStkPush({
     }
 
     // Handle unsuccessful response
-    const errorMessage =
-      data?.message ||
-      data?.error ||
-      `Payment gateway error (${res.status}). Please check channel configuration.`;
+    let errorMessage = data?.message || data?.error;
+    if (errorMessage === 'Unable to perform request' || res.status === 401) {
+      errorMessage =
+        'PayHero requires a small Service Wallet balance (KES 50+) in your PayHero dashboard to dispatch automated M-Pesa STK prompts.';
+    } else if (!errorMessage) {
+      errorMessage = `Payment gateway error (${res.status}). Please check channel configuration.`;
+    }
 
     return {
       success: false,
