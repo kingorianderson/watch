@@ -31,6 +31,7 @@ interface VideoPlayerProps {
   onEnded?: () => void;
   nextEpisodeInfo?: { season: number; episode: number; isNextSeason?: boolean } | null;
   onPlayNextEpisode?: () => void;
+  isCinemaMode?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -57,6 +58,7 @@ export default function VideoPlayer({
   onEnded,
   nextEpisodeInfo,
   onPlayNextEpisode,
+  isCinemaMode = false,
 }: VideoPlayerProps) {
   const [currentServer, setCurrentServer] = useState<StreamServer>(STREAM_SERVERS[0]);
   const [iframeKey, setIframeKey] = useState<number>(0);
@@ -287,7 +289,13 @@ export default function VideoPlayer({
   return (
     <div className="w-full space-y-4">
       {/* Video Player Frame Container */}
-      <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 ring-1 ring-zinc-800/50">
+      <div
+        className={`relative w-full transition-all duration-500 ease-in-out ${
+          isCinemaMode
+            ? 'fixed inset-0 z-50 w-screen h-screen rounded-none border-0 ring-0 shadow-none bg-black flex items-center justify-center'
+            : 'aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 ring-1 ring-zinc-800/50'
+        }`}
+      >
         {/* Loading Spinner Indicator for Iframe mode */}
         {isLoading && !currentServer.isNativeHls && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950/90 backdrop-blur-sm pointer-events-none">
@@ -451,7 +459,13 @@ export default function VideoPlayer({
       </div>
 
       {/* Sleek Collapsible Server Control Bar */}
-      <div className="bg-zinc-900/60 backdrop-blur-md border border-zinc-800/80 rounded-2xl overflow-hidden transition-all duration-300 shadow-lg">
+      <div
+        className={`bg-zinc-900/60 backdrop-blur-md border border-zinc-800/80 rounded-2xl overflow-hidden transition-all duration-500 shadow-lg ${
+          isCinemaMode
+            ? 'opacity-0 pointer-events-none -translate-y-2 max-h-0 py-0 border-0 m-0 overflow-hidden'
+            : 'opacity-100 translate-y-0'
+        }`}
+      >
         {/* Compact Summary Header Bar */}
         <div className="px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 flex-wrap">

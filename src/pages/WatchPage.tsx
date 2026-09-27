@@ -48,12 +48,60 @@ export default function WatchPage() {
   const [modalItem, setModalItem] = useState<MediaItem | null>(null);
   const [copied, setCopied] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isIdle, setIsIdle] = useState(false);
+  const [isNearTop, setIsNearTop] = useState(true);
 
   const { addToHistory, updateProgress, getLastWatched, getEpisodeProgress } = useWatchHistory();
   const { toggleWatchlist, isInWatchlist } = useWatchlist();
 
   const getLastWatchedRef = useRef(getLastWatched);
   getLastWatchedRef.current = getLastWatched;
+
+  // Auto-cinema mode after 30 seconds of inactivity when focused on the player
+  useEffect(() => {
+    let idleTimer: NodeJS.Timeout;
+
+    const resetIdle = () => {
+      setIsIdle(false);
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        setIsIdle(true);
+      }, 30000); // 30 seconds
+    };
+
+    resetIdle();
+
+    const handleScroll = () => {
+      setIsNearTop(window.scrollY <= 300);
+      resetIdle();
+    };
+
+    const activityEvents: (keyof WindowEventMap)[] = [
+      'mousemove',
+      'mousedown',
+      'touchstart',
+      'touchmove',
+      'touchend',
+      'wheel',
+      'keydown',
+      'pointermove',
+    ];
+
+    activityEvents.forEach((evt) => {
+      window.addEventListener(evt, resetIdle, { passive: true });
+    });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      clearTimeout(idleTimer);
+      activityEvents.forEach((evt) => {
+        window.removeEventListener(evt, resetIdle);
+      });
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  const isCinemaMode = isIdle && isNearTop;
 
   // If user visits /watch/tv/:id without season/episode in URL, resume last watched season/episode
   useEffect(() => {
@@ -265,7 +313,11 @@ export default function WatchPage() {
     <div className="min-h-screen bg-zinc-950 text-white pt-24 sm:pt-28 pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Navigation & Breadcrumb Header */}
-        <div className="flex items-center gap-3 py-1 overflow-x-auto whitespace-nowrap no-scrollbar">
+        <div
+          className={`flex items-center gap-3 py-1 overflow-x-auto whitespace-nowrap no-scrollbar transition-all duration-500 ease-in-out ${
+            isCinemaMode ? 'opacity-0 -translate-y-4 pointer-events-none' : 'opacity-100 translate-y-0'
+          }`}
+        >
           <button
             type="button"
             onClick={() => {
@@ -320,10 +372,17 @@ export default function WatchPage() {
           }}
           nextEpisodeInfo={nextEpisodeInfo}
           onPlayNextEpisode={handleNextEpisode}
+          isCinemaMode={isCinemaMode}
         />
 
-        {/* Support WATCHD / Fast Server Booster Banner */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-zinc-900/95 via-emerald-950/25 to-zinc-900/95 border border-emerald-500/20 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg shadow-emerald-950/20">
+        {/* Surrounding Details & Navigation: Soft Cinema Dim & Blur */}
+        <div
+          className={`space-y-8 transition-all duration-500 ease-in-out ${
+            isCinemaMode ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          }`}
+        >
+          {/* Support WATCHD / Fast Server Booster Banner */}
+          <div className="relative overflow-hidden bg-gradient-to-r from-zinc-900/95 via-emerald-950/25 to-zinc-900/95 border border-emerald-500/20 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg shadow-emerald-950/20">
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-emerald-600/30">
               <Heart className="w-5 h-5 fill-white animate-pulse" />
@@ -628,6 +687,7 @@ export default function WatchPage() {
             onOpenDetails={(item) => setModalItem(item)}
           />
         )}
+        </div>
       </div>
 
       {/* Media Details Modal */}
