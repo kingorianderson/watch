@@ -7,13 +7,10 @@ import {
   Zap,
   CheckCircle2,
   Smartphone,
-  CreditCard,
   RotateCw,
   AlertCircle,
   Lock,
 } from 'lucide-react';
-// @ts-ignore
-import PaystackPop from '@paystack/inline-js';
 import { useAuth } from '../context/AuthContext';
 import {
   sendPayHeroStkPush,
@@ -41,7 +38,6 @@ const SAVED_PHONE_KEY = 'watchd_payhero_phone';
 export default function SupportModal() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'paystack'>('mpesa');
   const [selectedAmount, setSelectedAmount] = useState<number>(500);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [isCustom, setIsCustom] = useState(false);
@@ -50,9 +46,6 @@ export default function SupportModal() {
   const [phone, setPhone] = useState<string>(() => {
     return localStorage.getItem(SAVED_PHONE_KEY) || '';
   });
-
-  // Email state for Card/Paystack
-  const [email, setEmail] = useState<string>(() => user?.email || '');
 
   // Flow states: 'form' | 'prompt_sent' | 'success' | 'failed'
   const [step, setStep] = useState<'form' | 'prompt_sent' | 'success' | 'failed'>('form');
@@ -154,85 +147,9 @@ export default function SupportModal() {
     }, 2500);
   };
 
-  const handlePaystackCheckout = () => {
-    setErrorMessage('');
-    if (!currentAmount || currentAmount < 1) {
-      setErrorMessage('Please enter an amount of at least KES 10');
-      return;
-    }
-
-    const payEmail =
-      email.trim() ||
-      user?.email ||
-      (phone ? `${phone.replace(/\D/g, '')}@watchd.app` : 'supporter@watchd.app');
-
-    setIsLoading(true);
-    setStatusMessage('Launching Paystack checkout...');
-
-    try {
-      const paystackKey =
-        import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ||
-        'pk_live_da3ed2fbbd176b1af5135e26941bf9cbfdad637a';
-      const paystack = new (PaystackPop as any)();
-
-      paystack.newTransaction({
-        key: paystackKey,
-        email: payEmail,
-        amount: Math.round(currentAmount * 100),
-        currency: 'KES',
-        channels: ['card', 'mobile_money', 'apple_pay'],
-        metadata: {
-          custom_fields: [
-            {
-              display_name: 'App',
-              variable_name: 'app',
-              value: 'WATCHD Streaming',
-            },
-            {
-              display_name: 'Supporter Name',
-              variable_name: 'supporter_name',
-              value: user?.name || 'WATCHD Supporter',
-            },
-            ...(phone
-              ? [
-                  {
-                    display_name: 'Phone',
-                    variable_name: 'phone',
-                    value: phone,
-                  },
-                ]
-              : []),
-          ],
-        },
-        onSuccess: (transaction: any) => {
-          setIsLoading(false);
-          setSuccessData({
-            reference: transaction.reference || `PSK_${Date.now()}`,
-            amount: currentAmount,
-          });
-          setStep('success');
-        },
-        onCancel: () => {
-          setIsLoading(false);
-        },
-      });
-    } catch (err: any) {
-      console.error('Paystack popup error:', err);
-      setIsLoading(false);
-      setErrorMessage(
-        'Could not open Paystack checkout. Please try again or use direct M-Pesa STK.'
-      );
-    }
-  };
-
   const handlePayNow = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-
-    if (paymentMethod === 'paystack') {
-      handlePaystackCheckout();
-      return;
-    }
 
     if (!currentAmount || currentAmount < 1) {
       setErrorMessage('Please enter an amount of at least KES 10');
@@ -246,7 +163,7 @@ export default function SupportModal() {
 
     if (!isSafaricom) {
       setErrorMessage(
-        'Direct STK PIN prompt only works on Safaricom M-Pesa. Switch to "Card & Airtel Money" above or enter a Safaricom number.'
+        'Direct STK PIN prompt only works on Safaricom M-Pesa. Please enter a Safaricom number (e.g. 0712..., 0722..., 0110...).'
       );
       return;
     }
@@ -330,7 +247,7 @@ export default function SupportModal() {
         {step === 'form' && (
           <>
             {/* Header */}
-            <div className="text-center space-y-2 mb-5">
+            <div className="text-center space-y-2 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center mx-auto shadow-lg shadow-emerald-600/30">
                 <Heart className="w-6 h-6 text-white fill-white animate-pulse" />
               </div>
@@ -338,43 +255,8 @@ export default function SupportModal() {
                 Support WATCH<span className="text-red-500 font-bold">HD</span>
               </h2>
               <p className="text-xs sm:text-sm text-zinc-400 max-w-sm mx-auto">
-                Direct Safaricom M-Pesa STK push or Card & Airtel Money with 0 extra fees!
+                Powered by <strong className="text-emerald-400">PayHero Kenya</strong>. Direct Safaricom M-Pesa STK push with zero extra charges!
               </p>
-            </div>
-
-            {/* Payment Method Selector Tabs */}
-            <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-950/80 border border-zinc-800 rounded-2xl mb-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentMethod('mpesa');
-                  setErrorMessage('');
-                }}
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                  paymentMethod === 'mpesa'
-                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>M-Pesa (Direct STK)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPaymentMethod('paystack');
-                  setErrorMessage('');
-                }}
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                  paymentMethod === 'paystack'
-                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-                }`}
-              >
-                <CreditCard className="w-3.5 h-3.5" />
-                <span>Card & Airtel Money</span>
-              </button>
             </div>
 
             <form onSubmit={handlePayNow} className="space-y-4">
@@ -444,110 +326,64 @@ export default function SupportModal() {
                 </div>
               </div>
 
-              {/* METHOD 1: M-PESA STK INPUT */}
-              {paymentMethod === 'mpesa' && (
-                <div className="space-y-1.5 pt-1 animate-in fade-in">
-                  <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Safaricom M-Pesa Number</span>
+              {/* M-Pesa Phone Input Field */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Safaricom M-Pesa Number</span>
+                  </span>
+                  {carrier === 'safaricom' ? (
+                    <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Safaricom M-Pesa
                     </span>
-                    {carrier === 'safaricom' ? (
-                      <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        Safaricom M-Pesa
-                      </span>
-                    ) : carrier === 'airtel' ? (
-                      <span className="text-[10px] text-amber-400 font-mono font-bold">
-                        Airtel (M-Pesa Only)
-                      </span>
-                    ) : carrier === 'telkom' ? (
-                      <span className="text-[10px] text-amber-400 font-mono font-bold">
-                        Telkom (M-Pesa Only)
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-emerald-400 font-mono font-medium">
-                        Safaricom 07XX / 011X
-                      </span>
-                    )}
-                  </label>
-                  <div className="relative">
-                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
-                      <span className="text-sm">🇰🇪</span>
-                      <span className="text-xs font-mono text-zinc-400 font-bold">+254</span>
-                      <div className="h-3.5 w-px bg-zinc-700 mx-0.5" />
-                    </div>
-                    <input
-                      type="tel"
-                      inputMode="tel"
-                      placeholder="0712 345 678"
-                      value={phone}
-                      onChange={handlePhoneChange}
-                      className={`w-full bg-zinc-950 border rounded-2xl pl-24 pr-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none font-mono transition ${
-                        carrier === 'airtel' || carrier === 'telkom'
-                          ? 'border-amber-500/80 focus:border-amber-500'
-                          : isSafaricom
-                          ? 'border-emerald-500/80 focus:border-emerald-500'
-                          : 'border-zinc-700 focus:border-emerald-500'
-                      }`}
-                      required
-                    />
-                  </div>
-                  {carrier === 'airtel' ? (
-                    <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-[11px] text-amber-300 flex items-center justify-between gap-2 animate-in fade-in">
-                      <span>⚠️ Airtel Money detected.</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPaymentMethod('paystack');
-                          setErrorMessage('');
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-amber-500 text-zinc-950 font-bold text-[10px] hover:bg-amber-400 transition cursor-pointer shrink-0"
-                      >
-                        Switch to Airtel / Card
-                      </button>
-                    </div>
+                  ) : carrier === 'airtel' ? (
+                    <span className="text-[10px] text-amber-400 font-mono font-bold">
+                      Airtel (M-Pesa Only)
+                    </span>
+                  ) : carrier === 'telkom' ? (
+                    <span className="text-[10px] text-amber-400 font-mono font-bold">
+                      Telkom (M-Pesa Only)
+                    </span>
                   ) : (
-                    <p className="text-[11px] text-zinc-500">
-                      Enter your Safaricom number to receive an instant PIN prompt on your phone.
-                    </p>
+                    <span className="text-[10px] text-emerald-400 font-mono font-medium">
+                      Safaricom 07XX / 011X
+                    </span>
                   )}
-                </div>
-              )}
-
-              {/* METHOD 2: CARD & AIRTEL MONEY (PAYSTACK) INPUTS */}
-              {paymentMethod === 'paystack' && (
-                <div className="space-y-3 pt-1 animate-in fade-in">
-                  {/* Supported badges */}
-                  <div className="flex items-center justify-center gap-3 text-[11px] text-zinc-400 py-1 bg-zinc-950/60 border border-zinc-800/80 rounded-xl">
-                    <span className="flex items-center gap-1 text-emerald-400 font-medium">
-                      <CreditCard className="w-3.5 h-3.5" />
-                      <span>Visa / Mastercard</span>
-                    </span>
-                    <span className="text-zinc-700">•</span>
-                    <span className="flex items-center gap-1 text-red-400 font-medium">
-                      <span>Airtel Money</span>
-                    </span>
-                    <span className="text-zinc-700">•</span>
-                    <span className="text-zinc-300 font-medium">Apple Pay</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
+                    <span className="text-sm">🇰🇪</span>
+                    <span className="text-xs font-mono text-zinc-400 font-bold">+254</span>
+                    <div className="h-3.5 w-px bg-zinc-700 mx-0.5" />
                   </div>
-
-                  {/* Email Field */}
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
-                      <span>Email for Payment Receipt</span>
-                      <span className="text-[10px] text-zinc-500">Optional</span>
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="supporter@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-2xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition"
-                    />
-                  </div>
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    placeholder="0712 345 678"
+                    value={phone}
+                    onChange={handlePhoneChange}
+                    className={`w-full bg-zinc-950 border rounded-2xl pl-24 pr-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none font-mono transition ${
+                      carrier === 'airtel' || carrier === 'telkom'
+                        ? 'border-amber-500/80 focus:border-amber-500'
+                        : isSafaricom
+                        ? 'border-emerald-500/80 focus:border-emerald-500'
+                        : 'border-zinc-700 focus:border-emerald-500'
+                    }`}
+                    required
+                  />
                 </div>
-              )}
+                {carrier === 'airtel' ? (
+                  <p className="text-[11px] text-amber-400 animate-in fade-in">
+                    ⚠️ Automated STK prompts only work on <strong>Safaricom M-Pesa</strong>. Please enter an M-Pesa number.
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-zinc-500">
+                    Enter your Safaricom number to receive an instant PIN prompt on your phone.
+                  </p>
+                )}
+              </div>
 
               {/* Error Alert */}
               {errorMessage && (
@@ -559,7 +395,7 @@ export default function SupportModal() {
                 </div>
               )}
 
-              {/* Submit Button */}
+              {/* Submit STK Button */}
               <button
                 type="submit"
                 disabled={isLoading || currentAmount <= 0}
@@ -568,23 +404,18 @@ export default function SupportModal() {
                 {isLoading ? (
                   <>
                     <RotateCw className="w-4 h-4 animate-spin" />
-                    <span>{statusMessage || 'Processing...'}</span>
-                  </>
-                ) : paymentMethod === 'mpesa' ? (
-                  <>
-                    <Zap className="w-4 h-4 fill-white" />
-                    <span>Pay KES {currentAmount || 0} via M-Pesa STK</span>
+                    <span>{statusMessage || 'Sending M-Pesa Prompt...'}</span>
                   </>
                 ) : (
                   <>
-                    <CreditCard className="w-4 h-4" />
-                    <span>Pay KES {currentAmount || 0} via Card / Airtel Money</span>
+                    <Zap className="w-4 h-4 fill-white" />
+                    <span>Pay KES {currentAmount || 0} via M-Pesa STK</span>
                   </>
                 )}
               </button>
 
               <div className="text-center text-[11px] text-zinc-500">
-                🔒 Safe & Instant • Powered by PayHero & Paystack
+                🔒 Safe & Instant • Powered by PayHero Africa
               </div>
             </form>
 
