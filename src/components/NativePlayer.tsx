@@ -1342,6 +1342,20 @@ export default function NativePlayer({
       )}
 
       {/* Cold-Start Initial Loading Spinner Only */}
+      {/* Translucent Brand Logo Watermark in OS Fullscreen Mode */}
+      {isFullscreen && (
+        <div className="absolute top-5 right-6 z-40 flex items-center select-none opacity-30 hover:opacity-85 transition-opacity duration-300 pointer-events-none">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 flex items-center justify-center shadow-md">
+              <Play className="w-3 h-3 text-white fill-white ml-0.5" />
+            </div>
+            <span className="text-base font-black tracking-tight text-white drop-shadow flex items-center">
+              WATC<span className="text-red-500 font-bold ml-0.5">HD</span>
+            </span>
+          </div>
+        </div>
+      )}
+
       {isLoading && !hasError && !isQualitySwitching && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none z-20">
           <div className="w-14 h-14 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin shadow-xl" />

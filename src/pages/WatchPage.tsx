@@ -60,6 +60,15 @@ export default function WatchPage() {
   const isCinemaMode = isIdle;
   const isCinemaModeRef = useRef(isCinemaMode);
   isCinemaModeRef.current = isCinemaMode;
+  const prevCinemaModeRef = useRef(false);
+
+  // Option B: When waking up from Cinema Mode, smoothly glide the screen to top (0%)
+  useEffect(() => {
+    if (prevCinemaModeRef.current && !isCinemaMode) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    prevCinemaModeRef.current = isCinemaMode;
+  }, [isCinemaMode]);
 
   // Two-tier Smart Cinema Activation:
   // 1. High Focus (>= 70% visible): 5 seconds idle
@@ -348,7 +357,7 @@ export default function WatchPage() {
   }, [id, mediaType, currentSeason, currentEpisode, location.state]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pt-24 sm:pt-28 pb-24">
+    <div className="min-h-screen bg-zinc-950 text-white pt-16 sm:pt-20 pb-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Navigation & Breadcrumb Header */}
         <div

@@ -294,7 +294,7 @@ export default function VideoPlayer({
         className={`transition-all duration-500 ease-in-out ${
           isCinemaMode
             ? 'fixed inset-0 z-50 w-screen h-screen bg-black flex items-center justify-center p-0 m-0 overflow-hidden select-none'
-            : 'relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 ring-1 ring-zinc-800/50'
+            : 'relative w-full max-h-[calc(100vh-140px)] aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 ring-1 ring-zinc-800/50 mx-auto'
         }`}
       >
         <div
