@@ -9,7 +9,6 @@ import {
   Smartphone,
   RotateCw,
   AlertCircle,
-  ExternalLink,
   Lock,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -37,6 +36,32 @@ const PRESET_AMOUNTS = [
 
 const SAVED_PHONE_KEY = 'watchd_payhero_phone';
 
+function loadPayHeroSdk(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined') {
+      resolve();
+      return;
+    }
+    if ((window as any).PayHero) {
+      resolve();
+      return;
+    }
+    const existing = document.getElementById('payhero-sdk-script');
+    if (existing) {
+      existing.addEventListener('load', () => resolve());
+      resolve();
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'payhero-sdk-script';
+    script.src = 'https://applet.payherokenya.com/cdn/button_sdk.js?v=3.1';
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => resolve();
+    document.body.appendChild(script);
+  });
+}
+
 export default function SupportModal() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -62,6 +87,46 @@ export default function SupportModal() {
   const countdownTimerRef = useRef<any>(null);
 
   const config = getPayHeroConfig();
+
+  // Load SDK and set up message listener for PayHero events
+  useEffect(() => {
+    loadPayHeroSdk().then(() => {
+      try {
+        if ((window as any).PayHero) {
+          (window as any).PayHero.init({
+            paymentUrl: config.lipwaLink || 'https://lipwa.link/11932',
+            channelID: Number(config.channelId) || 12072,
+            containerId: 'payhero-sdk-anchor',
+            amount: 500,
+            buttonName: 'Pay via M-Pesa',
+            buttonColor: '#059669',
+          });
+        }
+      } catch (err) {
+        console.warn('PayHero SDK init warning:', err);
+      }
+    });
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.paymentSuccess) {
+        clearAllTimers();
+        setSuccessData({
+          reference:
+            event.data.providerReference ||
+            event.data.reference ||
+            `PAYHERO_${Date.now()}`,
+          amount: event.data.amount || selectedAmount,
+        });
+        setStep('success');
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [config.lipwaLink, config.channelId, selectedAmount]);
 
   useEffect(() => {
     const handleOpen = () => {
@@ -100,7 +165,7 @@ export default function SupportModal() {
   if (!isOpen) return null;
 
   const currentAmount = isCustom ? Number(customAmount) || 0 : selectedAmount;
-  const { isValid: isPhoneValid, local: formattedPhone } = normalizeKenyanPhone(phone);
+  const { isValid: isPhoneValid, local: formattedPhone, international: intlPhone } = normalizeKenyanPhone(phone);
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -149,7 +214,7 @@ export default function SupportModal() {
     }, 2500);
   };
 
-  const handleInitiateStk = async (e: React.FormEvent) => {
+  const handlePayNow = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -159,7 +224,7 @@ export default function SupportModal() {
     }
 
     if (!isPhoneValid) {
-      setErrorMessage('Please enter a valid Safaricom / Airtel phone number (e.g. 0712345678 or 0112345678)');
+      setErrorMessage('Please enter a valid Safaricom / Airtel number (e.g. 0712 345 678)');
       return;
     }
 
@@ -171,27 +236,45 @@ export default function SupportModal() {
     }
 
     setIsLoading(true);
-    setStatusMessage('Connecting to PayHero M-Pesa gateway...');
+    setStatusMessage('Connecting to M-Pesa...');
 
+    // Attempt 1: Direct API STK push
     const res = await sendPayHeroStkPush({
       amount: currentAmount,
       phone: phone.trim(),
       customerName: user?.name || 'WATCHD Supporter',
     });
 
-    setIsLoading(false);
-
     if (res.success && res.reference) {
+      setIsLoading(false);
       setActiveReference(res.reference);
       setStep('prompt_sent');
       startPollingStatus(res.reference, currentAmount);
-    } else {
-      // If direct STK API returned an error, show clear details and option to retry or use Lipwa link
-      setErrorMessage(
-        res.message ||
-          'Could not dispatch STK push. You can also support via PayHero Lipwa link.'
-      );
+      return;
     }
+
+    // Attempt 2: Smooth In-App PayHero Modal SDK
+    await loadPayHeroSdk();
+    if ((window as any).PayHero) {
+      setIsLoading(false);
+      try {
+        (window as any).PayHero.pay({
+          amount: currentAmount,
+          phone: formattedPhone || intlPhone || phone,
+          name: user?.name || 'WATCHD Supporter',
+          reference: `WATCHD_${Date.now()}`,
+          channel_id: Number(config.channelId) || 12072,
+        });
+        return;
+      } catch (sdkErr) {
+        console.warn('PayHero SDK launch fallback:', sdkErr);
+      }
+    }
+
+    // Attempt 3: If SDK was blocked by browser, open direct Lipwa Link
+    setIsLoading(false);
+    const targetUrl = `${config.lipwaLink || 'https://lipwa.link/11932'}?amount=${currentAmount}&phone=${intlPhone || formattedPhone || phone}&channel_id=${config.channelId || 12072}`;
+    window.open(targetUrl, '_blank');
   };
 
   const handleManualConfirm = () => {
@@ -205,6 +288,9 @@ export default function SupportModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+      {/* Hidden anchor element for PayHero SDK */}
+      <div id="payhero-sdk-anchor" className="hidden" />
+
       <div className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden">
         {/* Ambient background glows */}
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none" />
@@ -233,11 +319,11 @@ export default function SupportModal() {
                 Support WATCH<span className="text-red-500 font-bold">HD</span>
               </h2>
               <p className="text-xs sm:text-sm text-zinc-400 max-w-sm mx-auto">
-                Powered by <strong className="text-emerald-400">PayHero Kenya</strong>. Direct Safaricom M-Pesa STK push with zero extra charges!
+                Powered by <strong className="text-emerald-400">PayHero Kenya</strong>. Direct M-Pesa STK push to keep WATCHD free & fast!
               </p>
             </div>
 
-            <form onSubmit={handleInitiateStk} className="space-y-4">
+            <form onSubmit={handlePayNow} className="space-y-4">
               {/* Preset Amounts Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {PRESET_AMOUNTS.map((item) => {
@@ -332,7 +418,7 @@ export default function SupportModal() {
                   />
                 </div>
                 <p className="text-[11px] text-zinc-500">
-                  Enter your number to receive an instant PIN prompt on your phone.
+                  Enter your phone number to receive the instant PIN prompt.
                 </p>
               </div>
 
@@ -342,19 +428,6 @@ export default function SupportModal() {
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <span>{errorMessage}</span>
-                    {config.lipwaLink && (
-                      <div className="mt-1.5">
-                        <a
-                          href={`${config.lipwaLink}?amount=${currentAmount}&phone=${formattedPhone || phone}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:underline font-bold"
-                        >
-                          <span>Open PayHero Lipwa Link Directly</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -368,7 +441,7 @@ export default function SupportModal() {
                 {isLoading ? (
                   <>
                     <RotateCw className="w-4 h-4 animate-spin" />
-                    <span>{statusMessage || 'Sending M-Pesa Prompt...'}</span>
+                    <span>{statusMessage || 'Processing Payment...'}</span>
                   </>
                 ) : (
                   <>
@@ -391,7 +464,7 @@ export default function SupportModal() {
               </div>
               <div className="flex items-center gap-1 text-amber-400 font-medium">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Instant Confirmation</span>
+                <span>Instant Settlement</span>
               </div>
             </div>
           </>
@@ -516,7 +589,7 @@ export default function SupportModal() {
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+            <div className="flex gap-2 justify-center pt-2">
               <button
                 onClick={() => {
                   setStep('form');
@@ -526,18 +599,6 @@ export default function SupportModal() {
               >
                 Try Again
               </button>
-
-              {config.lipwaLink && (
-                <a
-                  href={`${config.lipwaLink}?amount=${currentAmount}&phone=${formattedPhone || phone}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition"
-                >
-                  <span>Pay via Lipwa Link</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              )}
             </div>
           </div>
         )}
