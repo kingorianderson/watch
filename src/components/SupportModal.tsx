@@ -10,8 +10,6 @@ import {
   RotateCw,
   AlertCircle,
   ExternalLink,
-  ChevronRight,
-  HelpCircle,
   Lock,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
