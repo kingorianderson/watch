@@ -49,7 +49,6 @@ export default function WatchPage() {
   const [copied, setCopied] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [isIdle, setIsIdle] = useState(false);
-  const [isVideoInFocus, setIsVideoInFocus] = useState(true);
   const playerContainerRef = useRef<HTMLDivElement>(null);
 
   const { addToHistory, updateProgress, getLastWatched, getEpisodeProgress } = useWatchHistory();
@@ -58,19 +57,19 @@ export default function WatchPage() {
   const getLastWatchedRef = useRef(getLastWatched);
   getLastWatchedRef.current = getLastWatched;
 
-  const isCinemaMode = isIdle && isVideoInFocus;
+  const isCinemaMode = isIdle;
   const isCinemaModeRef = useRef(isCinemaMode);
   isCinemaModeRef.current = isCinemaMode;
 
-  // Auto-cinema mode after 5 seconds of inactivity when at least 75% of the video is visible in the viewport
+  // Two-tier Smart Cinema Activation:
+  // 1. High Focus (>= 70% visible): 5 seconds idle
+  // 2. Partial View (40% - 70% visible): 3 minutes (180s) idle
+  // 3. Far Scrolled (< 40% visible): Disabled
   useEffect(() => {
     let idleTimer: NodeJS.Timeout;
 
-    const checkVisibility = () => {
-      if (!playerContainerRef.current) {
-        setIsVideoInFocus(window.scrollY <= 300);
-        return;
-      }
+    const getVisibilityRatio = (): number => {
+      if (!playerContainerRef.current) return 1;
       const rect = playerContainerRef.current.getBoundingClientRect();
       const windowHeight = window.innerHeight || document.documentElement.clientHeight;
 
@@ -79,32 +78,40 @@ export default function WatchPage() {
       const visibleHeight = Math.max(0, visibleBottom - visibleTop);
       const totalHeight = rect.height || 1;
 
-      const visibleRatio = visibleHeight / totalHeight;
-      // At least 75% (0.75) visible: user is actively watching -> allow cinema mode
-      // Less than 75% visible: user is reading info/episodes/cast below -> disable cinema mode
-      setIsVideoInFocus(visibleRatio >= 0.75);
+      return visibleHeight / totalHeight;
     };
 
-    const resetIdle = () => {
-      setIsIdle(false);
+    const scheduleTimer = () => {
       clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        setIsIdle(true);
-      }, 5000); // 5 seconds
+      setIsIdle(false);
+
+      const ratio = getVisibilityRatio();
+
+      if (ratio >= 0.70) {
+        // High visibility (>= 70%): Quick 5-second engagement
+        idleTimer = setTimeout(() => {
+          setIsIdle(true);
+        }, 5000);
+      } else if (ratio >= 0.40) {
+        // Partial visibility (40% - 70%): Extended 3-minute (180s) passive viewing engagement
+        idleTimer = setTimeout(() => {
+          setIsIdle(true);
+        }, 180000);
+      }
+      // If < 40% visible, no timer is set (user is reading info/cast below)
     };
 
-    resetIdle();
-    checkVisibility();
+    scheduleTimer();
 
     const handleScroll = () => {
-      // Don't let layout changes during cinema activation break idle state
+      // Don't let synthetic scroll events during cinema activation break idle state
       if (isCinemaModeRef.current) return;
-      checkVisibility();
-      resetIdle();
+      scheduleTimer();
     };
 
     const handleResize = () => {
-      checkVisibility();
+      if (isCinemaModeRef.current) return;
+      scheduleTimer();
     };
 
     const activityEvents: (keyof WindowEventMap)[] = [
@@ -119,7 +126,7 @@ export default function WatchPage() {
     ];
 
     activityEvents.forEach((evt) => {
-      window.addEventListener(evt, resetIdle, { passive: true });
+      window.addEventListener(evt, scheduleTimer, { passive: true });
     });
     window.addEventListener('scroll', handleScroll, { passive: true });
     window.addEventListener('resize', handleResize, { passive: true });
@@ -127,7 +134,7 @@ export default function WatchPage() {
     return () => {
       clearTimeout(idleTimer);
       activityEvents.forEach((evt) => {
-        window.removeEventListener(evt, resetIdle);
+        window.removeEventListener(evt, scheduleTimer);
       });
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('resize', handleResize);
