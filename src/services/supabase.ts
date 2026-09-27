@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { WatchlistItem, WatchHistoryItem } from '../types/media';
+import { getCanonicalEmail, getEmailAliases } from '../utils/userMapping';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -18,10 +19,20 @@ export const cloudWatchlistService = {
   async getWatchlist(userId: string): Promise<WatchlistItem[] | null> {
     if (!supabase) return null;
     try {
+      const canonicalId = getCanonicalEmail(userId);
+      const aliases = getEmailAliases(canonicalId);
+      const orFilters = aliases
+        .flatMap((a) => [
+          `user_id.eq."${a}"`,
+          `user_id.eq."google_${a}"`,
+          `user_id.like."%${a}%"`,
+        ])
+        .join(',');
+
       const { data, error } = await supabase
         .from('watchlist')
         .select('*')
-        .or(`user_id.eq."${userId}",user_id.eq."google_${userId}",user_id.like."%${userId}%"`)
+        .or(orFilters)
         .order('added_at', { ascending: false });
 
       if (error) {
@@ -48,9 +59,10 @@ export const cloudWatchlistService = {
   async addToWatchlist(userId: string, item: WatchlistItem): Promise<boolean> {
     if (!supabase) return false;
     try {
+      const canonicalId = getCanonicalEmail(userId);
       const { error } = await supabase.from('watchlist').upsert(
         {
-          user_id: userId,
+          user_id: canonicalId,
           media_id: item.id,
           title: item.title,
           poster_path: item.poster_path,
@@ -77,10 +89,12 @@ export const cloudWatchlistService = {
   async removeFromWatchlist(userId: string, mediaId: number): Promise<boolean> {
     if (!supabase) return false;
     try {
+      const canonicalId = getCanonicalEmail(userId);
+      const aliases = getEmailAliases(canonicalId);
       const { error } = await supabase
         .from('watchlist')
         .delete()
-        .eq('user_id', userId)
+        .in('user_id', aliases)
         .eq('media_id', mediaId);
 
       if (error) {
@@ -101,10 +115,20 @@ export const cloudHistoryService = {
   async getHistory(userId: string): Promise<WatchHistoryItem[] | null> {
     if (!supabase) return null;
     try {
+      const canonicalId = getCanonicalEmail(userId);
+      const aliases = getEmailAliases(canonicalId);
+      const orFilters = aliases
+        .flatMap((a) => [
+          `user_id.eq."${a}"`,
+          `user_id.eq."google_${a}"`,
+          `user_id.like."%${a}%"`,
+        ])
+        .join(',');
+
       const { data, error } = await supabase
         .from('watch_history')
         .select('*')
-        .or(`user_id.eq."${userId}",user_id.eq."google_${userId}",user_id.like."%${userId}%"`)
+        .or(orFilters)
         .order('timestamp', { ascending: false })
         .limit(50);
 
@@ -134,8 +158,9 @@ export const cloudHistoryService = {
   async addToHistory(userId: string, item: WatchHistoryItem): Promise<boolean> {
     if (!supabase) return false;
     try {
+      const canonicalId = getCanonicalEmail(userId);
       const payload: any = {
-        user_id: userId,
+        user_id: canonicalId,
         media_id: item.id,
         title: item.title,
         poster_path: item.poster_path,
@@ -177,10 +202,12 @@ export const cloudHistoryService = {
   async removeFromHistory(userId: string, mediaId: number, type: 'movie' | 'tv'): Promise<boolean> {
     if (!supabase) return false;
     try {
+      const canonicalId = getCanonicalEmail(userId);
+      const aliases = getEmailAliases(canonicalId);
       const { error } = await supabase
         .from('watch_history')
         .delete()
-        .eq('user_id', userId)
+        .in('user_id', aliases)
         .eq('media_id', mediaId)
         .eq('type', type);
 
@@ -198,10 +225,12 @@ export const cloudHistoryService = {
   async clearHistory(userId: string): Promise<boolean> {
     if (!supabase) return false;
     try {
+      const canonicalId = getCanonicalEmail(userId);
+      const aliases = getEmailAliases(canonicalId);
       const { error } = await supabase
         .from('watch_history')
         .delete()
-        .eq('user_id', userId);
+        .in('user_id', aliases);
 
       if (error) {
         console.warn('Supabase clearHistory error:', error.message);

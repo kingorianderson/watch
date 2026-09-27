@@ -2,6 +2,7 @@ import { createContext, useState, useEffect, useCallback, type ReactNode } from 
 import type { WatchlistItem, MediaItem } from '../types/media';
 import { useAuth } from './AuthContext';
 import { cloudWatchlistService, isSupabaseConfigured } from '../services/supabase';
+import { getEmailAliases } from '../utils/userMapping';
 
 export interface WatchlistContextType {
   watchlist: WatchlistItem[];
@@ -15,7 +16,7 @@ export const WatchlistContext = createContext<WatchlistContextType | undefined>(
 const GUEST_STORAGE_KEY = 'watchlist_v1_guest';
 
 function getUserStorageKey(userId: string) {
-  return `watchlist_v1_${userId}`;
+  return `watchlist_v1_${userId.toLowerCase().trim()}`;
 }
 
 export function WatchlistProvider({ children }: { children: ReactNode }) {
@@ -40,6 +41,30 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
         const userKey = getUserStorageKey(user.id);
         const userStored = localStorage.getItem(userKey);
         let currentList: WatchlistItem[] = userStored ? JSON.parse(userStored) : [];
+
+        // Check if there are legacy alias items to merge into active account
+        const aliases = getEmailAliases(user.id);
+        aliases.forEach((alias) => {
+          if (alias.toLowerCase() !== user.id.toLowerCase()) {
+            const aliasKey = getUserStorageKey(alias);
+            const aliasStored = localStorage.getItem(aliasKey);
+            if (aliasStored) {
+              try {
+                const aliasList: WatchlistItem[] = JSON.parse(aliasStored);
+                if (aliasList.length > 0) {
+                  const existingIds = new Set(currentList.map((i) => Number(i.id)));
+                  const newItems = aliasList.filter((i) => !existingIds.has(Number(i.id)));
+                  if (newItems.length > 0) {
+                    currentList = [...newItems, ...currentList];
+                    localStorage.setItem(userKey, JSON.stringify(currentList));
+                  }
+                }
+              } catch {
+                // Ignore parse error
+              }
+            }
+          }
+        });
 
         // Check if there are guest items to merge into account
         const guestStored = localStorage.getItem(GUEST_STORAGE_KEY);

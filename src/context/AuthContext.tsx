@@ -1,5 +1,6 @@
-﻿import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import type { User } from '../types/auth';
+import { getCanonicalEmail, runAllUserMigrations } from '../utils/userMapping';
 
 interface AuthContextType {
   user: User | null;
@@ -26,8 +27,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<User | null>(() => {
     try {
+      runAllUserMigrations();
       const stored = localStorage.getItem(USER_STORAGE_KEY);
-      return stored ? JSON.parse(stored) : null;
+      if (stored) {
+        const parsed: User = JSON.parse(stored);
+        const canonical = getCanonicalEmail(parsed.email || parsed.id);
+        if (canonical && canonical !== parsed.email) {
+          parsed.id = canonical;
+          parsed.email = canonical;
+        }
+        return parsed;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -57,16 +68,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     customAvatar?: string,
     _googleSubId?: string
   ): Promise<User> => {
-    const email = (customEmail || 'alex.streamer@gmail.com').toLowerCase().trim();
-    const name = customName || email.split('@')[0];
+    const rawEmail = (customEmail || 'alex.streamer@gmail.com').toLowerCase().trim();
+    const canonicalEmail = getCanonicalEmail(rawEmail);
+    if (rawEmail !== canonicalEmail) {
+      runAllUserMigrations();
+    }
+    const name = customName || canonicalEmail.split('@')[0];
     const avatar =
       customAvatar ||
       `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
 
     const newUser: User = {
-      id: email,
+      id: canonicalEmail,
       name,
-      email,
+      email: canonicalEmail,
       avatar,
       provider: 'google',
       joinedAt: Date.now(),
@@ -78,12 +93,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithFacebook = async (customEmail?: string, customName?: string): Promise<User> => {
-    const email = (customEmail || 'jordan.moviebuff@facebook.com').toLowerCase().trim();
+    const rawEmail = (customEmail || 'jordan.moviebuff@facebook.com').toLowerCase().trim();
+    const canonicalEmail = getCanonicalEmail(rawEmail);
+    if (rawEmail !== canonicalEmail) {
+      runAllUserMigrations();
+    }
     const name = customName || 'Jordan Smith';
     const newUser: User = {
-      id: email,
+      id: canonicalEmail,
       name,
-      email,
+      email: canonicalEmail,
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}&backgroundColor=ffd5dc,ffdfbf`,
       provider: 'facebook',
       joinedAt: Date.now(),
@@ -95,12 +114,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithEmail = async (email: string, name: string): Promise<User> => {
-    const formattedEmail = email.toLowerCase().trim();
-    const formattedName = name.trim() || formattedEmail.split('@')[0];
+    const rawEmail = email.toLowerCase().trim();
+    const canonicalEmail = getCanonicalEmail(rawEmail);
+    if (rawEmail !== canonicalEmail) {
+      runAllUserMigrations();
+    }
+    const formattedName = name.trim() || canonicalEmail.split('@')[0];
     const newUser: User = {
-      id: formattedEmail,
+      id: canonicalEmail,
       name: formattedName,
-      email: formattedEmail,
+      email: canonicalEmail,
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(formattedName)}&backgroundColor=d1d4f9`,
       provider: 'email',
       joinedAt: Date.now(),
