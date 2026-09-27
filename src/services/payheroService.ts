@@ -209,24 +209,36 @@ export async function checkPayHeroTransactionStatus(
 
     const data = await res.json();
 
-    if (data?.status === 'SUCCESS' || data?.success === true) {
+    const status = String(data?.status || '').toUpperCase().trim();
+
+    if (status === 'SUCCESS') {
       return {
         success: true,
         status: 'SUCCESS',
         merchant: data.merchant,
-        providerReference: data.provider_reference || data.third_party_reference,
+        providerReference: data.third_party_reference || data.payment_reference || data.provider_reference || data.reference,
         amount: data.amount,
       };
     }
 
-    if (data?.status === 'FAILED') {
+    if (
+      status === 'FAILED' ||
+      status === 'CANCELLED' ||
+      status === 'REJECTED' ||
+      status === 'DECLINED' ||
+      status === 'EXPIRED'
+    ) {
       return {
         success: false,
         status: 'FAILED',
-        message: data.message || 'Transaction was cancelled or declined.',
+        message:
+          data.message ||
+          data.error_message ||
+          'Transaction was cancelled or declined on your phone.',
       };
     }
 
+    // Default to QUEUED / PENDING - awaiting PIN entry
     return {
       success: false,
       status: 'QUEUED',

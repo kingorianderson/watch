@@ -54,7 +54,8 @@ export default function SupportModal() {
   const [activeReference, setActiveReference] = useState<string>('');
   const [successData, setSuccessData] = useState<{ reference?: string; amount?: number }>({});
   const [errorMessage, setErrorMessage] = useState<string>('');
-  const [countdown, setCountdown] = useState<number>(60);
+  const [countdown, setCountdown] = useState<number>(75);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const pollingTimerRef = useRef<any>(null);
   const countdownTimerRef = useRef<any>(null);
@@ -66,6 +67,7 @@ export default function SupportModal() {
       setErrorMessage('');
       setStatusMessage('');
       setIsLoading(false);
+      setIsVerifying(false);
     };
     const handleClose = () => {
       setIsOpen(false);
@@ -106,7 +108,7 @@ export default function SupportModal() {
 
   const startPollingStatus = (ref: string, amountToConfirm: number) => {
     clearAllTimers();
-    setCountdown(60);
+    setCountdown(75);
 
     countdownTimerRef.current = setInterval(() => {
       setCountdown((prev) => {
@@ -132,14 +134,14 @@ export default function SupportModal() {
           setStep('success');
         } else if (result.status === 'FAILED') {
           clearAllTimers();
-          setErrorMessage(result.message || 'Payment was cancelled or failed.');
+          setErrorMessage(result.message || 'Payment was cancelled or declined on your phone.');
           setStep('failed');
         }
       } catch (e) {
         // Continue polling
       }
 
-      if (attempts >= 30) {
+      if (attempts >= 35) {
         clearAllTimers();
       }
     }, 2500);
@@ -189,13 +191,31 @@ export default function SupportModal() {
     }
   };
 
-  const handleManualConfirm = () => {
-    setSuccessData({
-      reference: activeReference || `MPESA_${Date.now()}`,
-      amount: currentAmount,
-    });
-    setStep('success');
-    clearAllTimers();
+  const handleManualVerify = async () => {
+    if (!activeReference) return;
+    setIsVerifying(true);
+    setErrorMessage('');
+    try {
+      const result = await checkPayHeroTransactionStatus(activeReference);
+      if (result.status === 'SUCCESS') {
+        clearAllTimers();
+        setSuccessData({
+          reference: result.providerReference || activeReference,
+          amount: result.amount || currentAmount,
+        });
+        setStep('success');
+      } else if (result.status === 'FAILED') {
+        clearAllTimers();
+        setErrorMessage(result.message || 'Payment was cancelled or declined on your phone.');
+        setStep('failed');
+      } else {
+        setErrorMessage('Awaiting PIN entry on your phone. Please check your screen and enter your PIN.');
+      }
+    } catch {
+      setErrorMessage('Unable to verify with PayHero at this moment. Please wait a few seconds and try again.');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   return (
@@ -422,14 +442,32 @@ export default function SupportModal() {
               <span>Awaiting confirmation ({countdown}s)...</span>
             </div>
 
+            {/* Error / info alert in prompt_sent */}
+            {errorMessage && (
+              <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-800/80 text-amber-200 text-xs flex items-start gap-2 animate-in fade-in max-w-sm mx-auto text-left">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span>{errorMessage}</span>
+                </div>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="space-y-2 pt-2">
               <button
                 type="button"
-                onClick={handleManualConfirm}
-                className="w-full py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-semibold transition cursor-pointer"
+                disabled={isVerifying}
+                onClick={handleManualVerify}
+                className="w-full py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                I have entered my PIN • Complete
+                {isVerifying ? (
+                  <>
+                    <RotateCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    <span>Verifying Payment Status...</span>
+                  </>
+                ) : (
+                  <span>I have entered my PIN • Verify Payment</span>
+                )}
               </button>
 
               <button
@@ -438,7 +476,7 @@ export default function SupportModal() {
                   clearAllTimers();
                   setStep('form');
                 }}
-                className="text-xs text-zinc-500 hover:text-zinc-300 transition"
+                className="text-xs text-zinc-500 hover:text-zinc-300 transition cursor-pointer"
               >
                 Change Phone Number or Amount
               </button>
