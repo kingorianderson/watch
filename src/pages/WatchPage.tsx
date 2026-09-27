@@ -11,10 +11,10 @@ import {
   Share2,
   Check,
   Copy,
-  Zap,
-  ExternalLink,
   Layers,
+  Heart,
 } from 'lucide-react';
+import { openSupportModal } from '../components/SupportModal';
 import { tmdbService, getProfileUrl, getPosterUrl, getBackdropUrl } from '../services/tmdb';
 import type { MediaItem, CastMember } from '../types/media';
 import VideoPlayer from '../components/VideoPlayer';
@@ -322,33 +322,32 @@ export default function WatchPage() {
           onPlayNextEpisode={handleNextEpisode}
         />
 
-        {/* Pro Stream Booster & VPN Affiliate Card */}
-        <div className="bg-gradient-to-r from-zinc-900/90 via-zinc-900/60 to-zinc-900/90 border border-zinc-800/80 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-600/10 border border-red-500/20 text-red-400 flex items-center justify-center shrink-0">
-              <Zap className="w-5 h-5" />
+        {/* Support WATCHD / Fast Server Booster Banner */}
+        <div className="relative overflow-hidden bg-gradient-to-r from-zinc-900/95 via-emerald-950/25 to-zinc-900/95 border border-emerald-500/20 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg shadow-emerald-950/20">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-emerald-600/30">
+              <Heart className="w-5 h-5 fill-white animate-pulse" />
             </div>
             <div>
               <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                <span>Experiencing buffering or slow streams?</span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-mono font-bold">
-                  Speed Boost
+                <span>Enjoying the stream? Support WATCH<span className="text-red-500 font-bold">HD</span></span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold">
+                  M-Pesa
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5">
-                Protect your connection & unlock buffer-free 4K Ultra-HD streaming with a high-speed VPN.
+                Help us keep servers fast, high-speed, and free to stream with instant M-Pesa support.
               </p>
             </div>
           </div>
-          <a
-            href={import.meta.env.VITE_VPN_AFFILIATE_URL || 'https://www.profitableratecpmnetwork.com/tmu3is0wf5?key=21a1ec5aea498f026813fc3a521b1af3'}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-red-600/20 hover:scale-105 transition shrink-0 cursor-pointer"
+          <button
+            type="button"
+            onClick={openSupportModal}
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 hover:scale-105 active:scale-95 transition shrink-0 cursor-pointer"
           >
-            <span>Unlock High-Speed Stream</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
+            <Heart className="w-3.5 h-3.5 fill-white" />
+            <span>Support WATCHD</span>
+          </button>
         </div>
 
         {/* Quick Episode Navigation (for TV Series) */}
