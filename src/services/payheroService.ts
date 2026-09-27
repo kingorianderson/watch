@@ -61,11 +61,54 @@ export function getPayHeroConfig(): PayHeroConfig {
   };
 }
 
+export type KenyanCarrier = 'safaricom' | 'airtel' | 'telkom' | 'unknown';
+
+/**
+ * Detects mobile carrier from Kenyan phone prefix
+ */
+export function detectKenyanCarrier(phone: string): KenyanCarrier {
+  const clean = phone.replace(/\D/g, '');
+  let local = '';
+  if (clean.startsWith('254') && clean.length === 12) {
+    local = '0' + clean.slice(3);
+  } else if (clean.startsWith('0') && clean.length === 10) {
+    local = clean;
+  } else if ((clean.startsWith('7') || clean.startsWith('1')) && clean.length === 9) {
+    local = '0' + clean;
+  }
+
+  if (!local || local.length < 3) return 'unknown';
+
+  const prefix3 = local.slice(0, 3);
+  const prefix4 = local.slice(0, 4);
+
+  // Safaricom prefixes: 070X, 071X, 072X, 0740-0743, 0745-0746, 0748, 0757-0759, 0768-0769, 079X, 0110-0115
+  if (['070', '071', '072', '079'].includes(prefix3)) return 'safaricom';
+  if (['0740', '0741', '0742', '0743', '0745', '0746', '0748', '0757', '0758', '0759', '0768', '0769'].includes(prefix4)) return 'safaricom';
+  if (['0110', '0111', '0112', '0113', '0114', '0115'].includes(prefix4)) return 'safaricom';
+
+  // Airtel prefixes: 073X, 078X, 0750-0756, 0100-0106
+  if (['073', '078'].includes(prefix3)) return 'airtel';
+  if (['0750', '0751', '0752', '0753', '0754', '0755', '0756'].includes(prefix4)) return 'airtel';
+  if (['0100', '0101', '0102', '0103', '0104', '0105', '0106'].includes(prefix4)) return 'airtel';
+
+  // Telkom prefixes: 077X
+  if (['077'].includes(prefix3)) return 'telkom';
+
+  return 'unknown';
+}
+
 /**
  * Normalizes Kenyan phone numbers to local standard `07XXXXXXXX` or `01XXXXXXXX`
- * and international standard `254XXXXXXXXX`.
+ * and international standard `254XXXXXXXXX`, while detecting network carrier.
  */
-export function normalizeKenyanPhone(input: string): { local: string; international: string; isValid: boolean } {
+export function normalizeKenyanPhone(input: string): {
+  local: string;
+  international: string;
+  isValid: boolean;
+  carrier: KenyanCarrier;
+  isSafaricom: boolean;
+} {
   const clean = input.replace(/\D/g, '');
 
   let local = '';
@@ -86,8 +129,10 @@ export function normalizeKenyanPhone(input: string): { local: string; internatio
   }
 
   const isValid = local.length === 10 && (local.startsWith('07') || local.startsWith('01'));
+  const carrier = detectKenyanCarrier(local);
+  const isSafaricom = carrier === 'safaricom';
 
-  return { local, international, isValid };
+  return { local, international, isValid, carrier, isSafaricom };
 }
 
 /**
@@ -100,12 +145,20 @@ export async function sendPayHeroStkPush({
   reference,
 }: StkPushRequest): Promise<StkPushResponse> {
   const config = getPayHeroConfig();
-  const { local, international, isValid } = normalizeKenyanPhone(phone);
+  const { local, international, isValid, carrier } = normalizeKenyanPhone(phone);
 
   if (!isValid) {
     return {
       success: false,
-      message: 'Please enter a valid Kenyan Safaricom / Airtel number (e.g. 0712 345 678)',
+      message: 'Please enter a valid Kenyan Safaricom number (e.g. 0712 345 678 or 0110 345 678)',
+    };
+  }
+
+  if (carrier === 'airtel' || carrier === 'telkom') {
+    return {
+      success: false,
+      message:
+        'Direct STK PIN prompts only work on Safaricom M-Pesa. Please enter a Safaricom number (e.g. 0712..., 0722..., 0110...).',
     };
   }
 

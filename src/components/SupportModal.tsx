@@ -98,7 +98,7 @@ export default function SupportModal() {
   if (!isOpen) return null;
 
   const currentAmount = isCustom ? Number(customAmount) || 0 : selectedAmount;
-  const { isValid: isPhoneValid } = normalizeKenyanPhone(phone);
+  const { isValid: isPhoneValid, carrier, isSafaricom } = normalizeKenyanPhone(phone);
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -157,7 +157,14 @@ export default function SupportModal() {
     }
 
     if (!isPhoneValid) {
-      setErrorMessage('Please enter a valid Safaricom / Airtel number (e.g. 0712 345 678 or 0112 345 678)');
+      setErrorMessage('Please enter a valid Safaricom number (e.g. 0712 345 678 or 0110 345 678)');
+      return;
+    }
+
+    if (!isSafaricom) {
+      setErrorMessage(
+        'Direct STK PIN prompt only works on Safaricom M-Pesa. Please enter a Safaricom number (e.g. 0712..., 0722..., 0110...).'
+      );
       return;
     }
 
@@ -324,11 +331,26 @@ export default function SupportModal() {
                 <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>M-Pesa Phone Number</span>
+                    <span>Safaricom M-Pesa Number</span>
                   </span>
-                  <span className="text-[10px] text-emerald-400 font-mono font-medium">
-                    Safaricom / Airtel
-                  </span>
+                  {carrier === 'safaricom' ? (
+                    <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Safaricom M-Pesa
+                    </span>
+                  ) : carrier === 'airtel' ? (
+                    <span className="text-[10px] text-amber-400 font-mono font-bold">
+                      Airtel (M-Pesa Only)
+                    </span>
+                  ) : carrier === 'telkom' ? (
+                    <span className="text-[10px] text-amber-400 font-mono font-bold">
+                      Telkom (M-Pesa Only)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-emerald-400 font-mono font-medium">
+                      Safaricom 07XX / 011X
+                    </span>
+                  )}
                 </label>
                 <div className="relative">
                   <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
@@ -342,13 +364,25 @@ export default function SupportModal() {
                     placeholder="0712 345 678"
                     value={phone}
                     onChange={handlePhoneChange}
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-2xl pl-24 pr-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 font-mono transition"
+                    className={`w-full bg-zinc-950 border rounded-2xl pl-24 pr-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none font-mono transition ${
+                      carrier === 'airtel' || carrier === 'telkom'
+                        ? 'border-amber-500/80 focus:border-amber-500'
+                        : isSafaricom
+                        ? 'border-emerald-500/80 focus:border-emerald-500'
+                        : 'border-zinc-700 focus:border-emerald-500'
+                    }`}
                     required
                   />
                 </div>
-                <p className="text-[11px] text-zinc-500">
-                  Enter your number to receive an instant PIN prompt on your phone.
-                </p>
+                {carrier === 'airtel' ? (
+                  <p className="text-[11px] text-amber-400 animate-in fade-in">
+                    ⚠️ Automated STK prompts only work on <strong>Safaricom M-Pesa</strong>. Please enter an M-Pesa number.
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-zinc-500">
+                    Enter your Safaricom number to receive an instant PIN prompt on your phone.
+                  </p>
+                )}
               </div>
 
               {/* Error Alert */}
