@@ -1,34 +1,29 @@
 /**
  * Video Playback & Tracking Thresholds:
  *
- * 1. Preview Threshold (First 3 minutes / 180 seconds):
- *    - If watched <= 180s, the user was just previewing.
- *    - The item is recorded in watch history, but the resume timestamp remains at 0:00 (normal time).
+ * 1. Preview Threshold (First 30 seconds):
+ *    - If watched <= 30s, the user was just previewing or testing the stream.
+ *    - The item is recorded in watch history, but the resume timestamp remains at 0:00.
+ *    - If watched > 30s, the exact second is preserved so you can resume where you left off.
  *
- * 2. Outro / Completed Threshold:
- *    - TV Series: Last 3 minutes (180s) of the episode is considered outro/credits.
- *    - Movies: Last 4 minutes (240s) of the movie is considered outro/credits.
- *    - If reached or video ends, the item is marked as Completed, and the resume timestamp resets to 0:00.
+ * 2. 100% End of Video Rule:
+ *    - An episode or movie is ONLY considered completed when it has truly reached 100%
+ *      (either video 'ended' event fired, or playback reached the final 3 seconds of the stream).
+ *    - No early outro cutoffs are applied, preserving climaxes and post-credit scenes.
  */
 
-export const PREVIEW_THRESHOLD_SECONDS = 180; // 3 minutes
-export const TV_OUTRO_THRESHOLD_SECONDS = 180; // 3 minutes
-export const MOVIE_OUTRO_THRESHOLD_SECONDS = 240; // 4 minutes
-
-export function getOutroThreshold(type: 'movie' | 'tv'): number {
-  return type === 'tv' ? TV_OUTRO_THRESHOLD_SECONDS : MOVIE_OUTRO_THRESHOLD_SECONDS;
-}
+export const PREVIEW_THRESHOLD_SECONDS = 30; // 30 seconds
 
 export function isPlaybackCompleted(
   progress?: number,
   duration?: number,
-  type: 'movie' | 'tv' = 'movie',
+  _type: 'movie' | 'tv' = 'movie',
   completedFlag?: boolean
 ): boolean {
   if (completedFlag) return true;
-  if (!duration || duration <= 300 || typeof progress !== 'number') return false;
-  const threshold = getOutroThreshold(type);
-  return progress >= duration - threshold;
+  if (!duration || duration <= 10 || typeof progress !== 'number') return false;
+  // Strict 100% completion: video has finished or is within final 3 seconds of total duration
+  return progress >= duration - 3;
 }
 
 export function isPlaybackPreview(
@@ -51,4 +46,3 @@ export function getEffectiveResumePosition(
   if (isPlaybackPreview(progress, completedFlag)) return 0;
   return Math.floor(progress);
 }
-

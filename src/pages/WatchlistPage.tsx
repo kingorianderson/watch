@@ -7,7 +7,7 @@ import { getPosterUrl } from '../services/tmdb';
 import MediaDetailsModal from '../components/MediaDetailsModal';
 import type { MediaItem } from '../types/media';
 import { usePageTitle } from '../hooks/usePageTitle';
-import { isPlaybackCompleted, isPlaybackPreview } from '../utils/historyHelpers';
+import { isPlaybackCompleted, isPlaybackPreview, PREVIEW_THRESHOLD_SECONDS } from '../utils/historyHelpers';
 
 export default function WatchlistPage() {
   usePageTitle('My Library');
@@ -86,15 +86,28 @@ export default function WatchlistPage() {
                     {(() => {
                       const isTv = item.type === 'tv';
                       const lastWatched = isTv ? getLastWatched(item.id, 'tv') : null;
+                      const isCompleted = isPlaybackCompleted(lastWatched?.progress, lastWatched?.duration, 'tv', lastWatched?.completed);
+                      const isPreview = isPlaybackPreview(lastWatched?.progress, isCompleted);
+                      const hasActiveResume = Boolean(lastWatched && !isCompleted && !isPreview && lastWatched.progress && lastWatched.progress > PREVIEW_THRESHOLD_SECONDS);
                       const playUrl = isTv
-                        ? `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
+                        ? isCompleted
+                          ? `/watch/tv/${item.id}`
+                          : `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
                         : `/watch/movie/${item.id}`;
 
                       return (
                         <Link
                           to={playUrl}
                           className="pointer-events-auto w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center shadow-xl hover:scale-110 transition cursor-pointer"
-                          title={lastWatched ? `Resume S${lastWatched.season}:E${lastWatched.episode}` : 'Watch Now'}
+                          title={
+                            hasActiveResume
+                              ? `Resume S${lastWatched?.season}:E${lastWatched?.episode}`
+                              : isTv && isCompleted
+                              ? 'Next Episode'
+                              : lastWatched
+                              ? 'Watch Again'
+                              : 'Watch Now'
+                          }
                         >
                           <Play className="w-5 h-5 fill-white ml-0.5" />
                         </Link>
@@ -154,13 +167,15 @@ export default function WatchlistPage() {
           {history.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {history.map((item) => {
-                const playUrl =
-                  item.type === 'tv'
-                    ? `/watch/tv/${item.id}/${item.season || 1}/${item.episode || 1}`
-                    : `/watch/movie/${item.id}`;
-
                 const isCompleted = isPlaybackCompleted(item.progress, item.duration, item.type, item.completed);
                 const isPreview = isPlaybackPreview(item.progress, isCompleted);
+
+                const playUrl =
+                  item.type === 'tv'
+                    ? isCompleted
+                      ? `/watch/tv/${item.id}`
+                      : `/watch/tv/${item.id}/${item.season || 1}/${item.episode || 1}`
+                    : `/watch/movie/${item.id}`;
 
                 const progressPct =
                   isCompleted
@@ -236,7 +251,9 @@ export default function WatchlistPage() {
                         <Play className="w-3 h-3 fill-current" />
                         <span>
                           {isCompleted
-                            ? 'Watch Again'
+                            ? item.type === 'tv'
+                              ? 'Next Episode'
+                              : 'Watch Again'
                             : isPreview
                             ? 'Watch'
                             : item.type === 'tv' && item.season

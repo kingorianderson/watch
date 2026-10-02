@@ -92,13 +92,15 @@ export default function HomePage() {
           </div>
           <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
             {history.slice(0, 8).map((item) => {
-              const url =
-                item.type === 'tv'
-                  ? `/watch/tv/${item.id}/${item.season || 1}/${item.episode || 1}`
-                  : `/watch/movie/${item.id}`;
-
               const isCompleted = isPlaybackCompleted(item.progress, item.duration, item.type, item.completed);
               const isPreview = isPlaybackPreview(item.progress, isCompleted);
+
+              const url =
+                item.type === 'tv'
+                  ? isCompleted
+                    ? `/watch/tv/${item.id}`
+                    : `/watch/tv/${item.id}/${item.season || 1}/${item.episode || 1}`
+                  : `/watch/movie/${item.id}`;
 
               const progressPct =
                 isCompleted
@@ -167,13 +169,15 @@ export default function HomePage() {
                     <div className="flex items-center justify-between text-xs text-zinc-400 mt-1">
                       <span>
                         {item.type === 'tv'
-                          ? `S${item.season || 1} • Ep ${item.episode || 1}`
+                          ? isCompleted
+                            ? `Up Next: Ep ${(item.episode || 1) + 1}`
+                            : `S${item.season || 1} • Ep ${item.episode || 1}`
                           : 'Movie'}
                       </span>
                       {isCompleted ? (
                         <span className="text-[11px] text-emerald-400 font-mono font-bold flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" />
-                          <span>Watched</span>
+                          <span>{item.type === 'tv' ? 'Up Next' : 'Watched'}</span>
                         </span>
                       ) : isPreview ? (
                         <span className="text-[11px] text-zinc-400 font-mono">Previewed</span>

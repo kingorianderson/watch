@@ -25,6 +25,7 @@ import { useWatchHistory } from '../hooks/useWatchHistory';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useMetaTags } from '../hooks/useMetaTags';
+import { isPlaybackCompleted, PREVIEW_THRESHOLD_SECONDS } from '../utils/historyHelpers';
 
 export default function WatchPage() {
   const { type, id, season, episode } = useParams<{
@@ -60,15 +61,6 @@ export default function WatchPage() {
   const isCinemaMode = isIdle;
   const isCinemaModeRef = useRef(isCinemaMode);
   isCinemaModeRef.current = isCinemaMode;
-  const prevCinemaModeRef = useRef(false);
-
-  // Option B: When waking up from Cinema Mode, smoothly glide the screen to top (0%)
-  useEffect(() => {
-    if (prevCinemaModeRef.current && !isCinemaMode) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-    prevCinemaModeRef.current = isCinemaMode;
-  }, [isCinemaMode]);
 
   // Two-tier Smart Cinema Activation:
   // 1. High Focus (>= 70% visible): 5 seconds idle
@@ -150,15 +142,57 @@ export default function WatchPage() {
     };
   }, []);
 
-  // If user visits /watch/tv/:id without season/episode in URL, resume last watched season/episode
+  // If user visits /watch/tv/:id without season/episode in URL:
+  // - If the last watched episode is incomplete (< 100%), resume that exact episode immediately!
+  // - If the last watched episode is strictly 100% completed, advance to the next episode once details are loaded.
   useEffect(() => {
     if (mediaType === 'tv' && id && (!season || !episode)) {
       const lastWatched = getLastWatchedRef.current(Number(id), 'tv');
-      const targetSeason = lastWatched?.season || 1;
-      const targetEpisode = lastWatched?.episode || 1;
-      navigate(`/watch/tv/${id}/${targetSeason}/${targetEpisode}`, { replace: true });
+      const isCompleted = isPlaybackCompleted(
+        lastWatched?.progress,
+        lastWatched?.duration,
+        'tv',
+        lastWatched?.completed
+      );
+
+      // If user stopped midway (incomplete episode), NEVER skip to next episode! Resume immediately.
+      if (lastWatched && !isCompleted) {
+        navigate(`/watch/tv/${id}/${lastWatched.season || 1}/${lastWatched.episode || 1}`, {
+          replace: true,
+        });
+        return;
+      }
+
+      // If no history exists, start at S1:E1
+      if (!lastWatched) {
+        navigate(`/watch/tv/${id}/1/1`, { replace: true });
+        return;
+      }
+
+      // If strictly 100% completed, advance to next episode when details/seasons are available
+      if (details?.seasons) {
+        const validSeasons = details.seasons.filter((s) => s.season_number > 0);
+        const currSeasonNum = lastWatched.season || 1;
+        const currEpNum = lastWatched.episode || 1;
+        const currSeasonObj = validSeasons.find((s) => s.season_number === currSeasonNum);
+        const maxEpisodes = currSeasonObj?.episode_count || 1;
+
+        if (currEpNum < maxEpisodes) {
+          navigate(`/watch/tv/${id}/${currSeasonNum}/${currEpNum + 1}`, { replace: true });
+        } else {
+          // Season finale complete - advance to next season if available
+          const nextSeasonNum = currSeasonNum + 1;
+          const nextSeasonObj = validSeasons.find((s) => s.season_number === nextSeasonNum);
+          if (nextSeasonObj && nextSeasonObj.episode_count > 0) {
+            navigate(`/watch/tv/${id}/${nextSeasonNum}/1`, { replace: true });
+          } else {
+            // Entire series complete - rewatch from beginning
+            navigate(`/watch/tv/${id}/1/1`, { replace: true });
+          }
+        }
+      }
     }
-  }, [id, mediaType, season, episode, navigate]);
+  }, [id, mediaType, season, episode, navigate, details]);
 
   useEffect(() => {
     if (!id) return;
@@ -352,12 +386,12 @@ export default function WatchPage() {
       mediaType === 'tv' ? currentSeason : 1,
       mediaType === 'tv' ? currentEpisode : 1
     );
-    return saved?.resumeProgress ?? (saved?.progress && saved.progress > 180 ? saved.progress : 0);
+    return saved?.resumeProgress ?? (saved?.progress && saved.progress > PREVIEW_THRESHOLD_SECONDS ? saved.progress : 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, mediaType, currentSeason, currentEpisode, location.state]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pt-16 sm:pt-20 pb-20">
+    <div className="min-h-screen bg-zinc-950 text-white pt-24 sm:pt-28 pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Navigation & Breadcrumb Header */}
         <div
@@ -415,8 +449,8 @@ export default function WatchPage() {
             title={title}
             releaseYear={year ? Number(year) : undefined}
             startAt={initialStartAt}
-            onProgressUpdate={(prog, dur) => {
-              updateProgress(Number(id), mediaType, prog, dur, currentSeason, currentEpisode);
+            onProgressUpdate={(prog, dur, completed) => {
+              updateProgress(Number(id), mediaType, prog, dur, currentSeason, currentEpisode, completed);
             }}
             nextEpisodeInfo={nextEpisodeInfo}
             onPlayNextEpisode={handleNextEpisode}

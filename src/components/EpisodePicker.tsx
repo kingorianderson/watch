@@ -127,7 +127,7 @@ export default function EpisodePicker({
                 ? Math.min(100, Math.round((progressInfo.progress / progressInfo.duration) * 100))
                 : 0;
 
-            const isWatched = isCompleted || progressPct >= 85;
+            const isWatched = isCompleted;
 
             return (
               <button

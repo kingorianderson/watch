@@ -28,7 +28,7 @@ interface VideoPlayerProps {
   title: string;
   releaseYear?: number;
   startAt?: number;
-  onProgressUpdate?: (progress: number, duration: number) => void;
+  onProgressUpdate?: (progress: number, duration: number, completed?: boolean) => void;
   onEnded?: () => void;
   nextEpisodeInfo?: { season: number; episode: number; isNextSeason?: boolean } | null;
   onPlayNextEpisode?: () => void;
@@ -74,6 +74,7 @@ export default function VideoPlayer({
 
   const countdownTimerRef = useRef<any>(null);
   const hasTriggeredNextRef = useRef<boolean>(false);
+  const lastDurationRef = useRef<number>(0);
   const startAtRef = useRef<number>(startAt);
   startAtRef.current = startAt;
 
@@ -184,11 +185,14 @@ export default function VideoPlayer({
           const { event: eventType, currentTime, duration } = data.data;
 
           if (typeof currentTime === 'number') {
-            onProgressUpdateRef.current?.(currentTime, duration || 0);
+            const validDur = duration || lastDurationRef.current || 0;
+            if (duration && duration > 0) lastDurationRef.current = duration;
 
-            // Only trigger auto next episode when the episode is 100% complete
+            // Only trigger auto next episode when the episode is strictly 100% complete
             const is100PercentComplete =
-              eventType === 'ended' || (duration > 30 && currentTime >= duration - 2);
+              eventType === 'ended' || (validDur > 10 && currentTime >= validDur - 2);
+
+            onProgressUpdateRef.current?.(currentTime, validDur, is100PercentComplete);
 
             if (
               is100PercentComplete &&
@@ -232,10 +236,12 @@ export default function VideoPlayer({
 
   // Handlers for NativePlayer
   const handleNativeProgress = (currentTime: number, duration: number) => {
-    onProgressUpdateRef.current?.(currentTime, duration);
+    if (duration > 0) lastDurationRef.current = duration;
 
     // Trigger auto next episode strictly when 100% complete (last 2 seconds)
-    const is100PercentComplete = duration > 30 && currentTime >= duration - 2;
+    const is100PercentComplete = duration > 10 && currentTime >= duration - 2;
+    onProgressUpdateRef.current?.(currentTime, duration, is100PercentComplete);
+
     if (
       is100PercentComplete &&
       !hasTriggeredNextRef.current &&
@@ -249,6 +255,9 @@ export default function VideoPlayer({
   };
 
   const handleNativeEnded = () => {
+    const dur = lastDurationRef.current || 1000;
+    onProgressUpdateRef.current?.(dur, dur, true);
+
     if (
       !hasTriggeredNextRef.current &&
       nextEpisodeInfoRef.current &&

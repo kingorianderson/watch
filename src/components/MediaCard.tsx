@@ -25,9 +25,6 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
 
   // Resume last watched season and episode if available
   const lastWatched = getLastWatched(item.id, isTv ? 'tv' : 'movie');
-  const playUrl = isTv
-    ? `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
-    : `/watch/movie/${item.id}`;
 
   const isCompleted = isPlaybackCompleted(
     lastWatched?.progress,
@@ -44,7 +41,15 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
       ? Math.min(100, Math.round((lastWatched.progress / lastWatched.duration) * 100))
       : 0;
 
-  const hasActiveResume = Boolean(lastWatched && !isCompleted && !isPreview && progressPercent > 5);
+  const hasActiveResume = Boolean(lastWatched && !isCompleted && !isPreview && progressPercent > 2);
+
+  // If TV and episode is strictly 100% completed, link to /watch/tv/${item.id} to advance to next episode
+  // If TV and episode is incomplete (< 100%), strictly link directly to that exact episode
+  const playUrl = isTv
+    ? isCompleted
+      ? `/watch/tv/${item.id}`
+      : `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
+    : `/watch/movie/${item.id}`;
 
   const handleBookmarkClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -130,6 +135,8 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
                 ? isTv && lastWatched?.season
                   ? `Resume S${lastWatched.season}:E${lastWatched.episode}`
                   : 'Resume'
+                : isTv && isCompleted
+                ? 'Next Episode'
                 : isCompleted
                 ? 'Watch Again'
                 : 'Watch Now'
@@ -168,7 +175,11 @@ export default function MediaCard({ item, onOpenDetails, onSelect }: MediaCardPr
           <span>{year || 'Unknown'}</span>
           {isTv && lastWatched?.season ? (
             <span className="text-[10px] text-red-400 font-mono font-semibold">
-              Resume S{lastWatched.season}:E{lastWatched.episode}
+              {hasActiveResume
+                ? `Resume S${lastWatched.season}:E${lastWatched.episode}`
+                : isCompleted
+                ? `Up Next: Ep ${(lastWatched.episode || 1) + 1}`
+                : `S${lastWatched.season}:E${lastWatched.episode}`}
             </span>
           ) : (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 uppercase font-mono">

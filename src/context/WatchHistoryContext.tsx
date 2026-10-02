@@ -25,7 +25,8 @@ export interface WatchHistoryContextType {
     progress: number,
     duration: number,
     season?: number,
-    episode?: number
+    episode?: number,
+    completed?: boolean
   ) => void;
   getLastWatched: (id: number, type: 'movie' | 'tv') => WatchHistoryItem | undefined;
   getEpisodeProgress: (
@@ -203,13 +204,14 @@ export function WatchHistoryProvider({ children }: { children: ReactNode }) {
       progress: number,
       duration: number,
       season?: number,
-      episode?: number
+      episode?: number,
+      completed?: boolean
     ) => {
       const now = Date.now();
       const itemKey = `${type}_${id}`;
       const epKey = `watch_progress_${type}_${id}_${season || 1}_${episode || 1}`;
 
-      const isFinished = isPlaybackCompleted(progress, duration, type);
+      const isFinished = isPlaybackCompleted(progress, duration, type, completed);
       const resumeProgress = getEffectiveResumePosition(progress, duration, type, isFinished);
 
       try {

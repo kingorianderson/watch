@@ -23,6 +23,7 @@ import type { MediaItem } from '../types/media';
 import { useAuth } from '../context/AuthContext';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { useWatchHistory } from '../hooks/useWatchHistory';
+import { isPlaybackCompleted } from '../utils/historyHelpers';
 import UserProfileMenu from './UserProfileMenu';
 import { openSupportModal } from './SupportModal';
 
@@ -410,8 +411,11 @@ export default function Navbar() {
                         const year = (item.release_date || item.first_air_date || '').substring(0, 4);
                         const isTv = item.media_type === 'tv' || (!item.release_date && !!item.first_air_date);
                         const lastWatched = isTv ? getLastWatched(item.id, 'tv') : null;
+                        const isCompleted = isPlaybackCompleted(lastWatched?.progress, lastWatched?.duration, 'tv', lastWatched?.completed);
                         const playUrl = isTv
-                          ? `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
+                          ? isCompleted
+                            ? `/watch/tv/${item.id}`
+                            : `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
                           : `/watch/movie/${item.id}`;
 
                         return (
@@ -715,8 +719,11 @@ export default function Navbar() {
                     const year = (item.release_date || item.first_air_date || '').substring(0, 4);
                     const isTv = item.media_type === 'tv' || (!item.release_date && !!item.first_air_date);
                     const lastWatched = isTv ? getLastWatched(item.id, 'tv') : null;
+                    const isCompleted = isPlaybackCompleted(lastWatched?.progress, lastWatched?.duration, 'tv', lastWatched?.completed);
                     const playUrl = isTv
-                      ? `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
+                      ? isCompleted
+                        ? `/watch/tv/${item.id}`
+                        : `/watch/tv/${item.id}/${lastWatched?.season || 1}/${lastWatched?.episode || 1}`
                       : `/watch/movie/${item.id}`;
 
                     return (
