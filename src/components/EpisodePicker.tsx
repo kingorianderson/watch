@@ -23,7 +23,17 @@ export default function EpisodePicker({
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const { getEpisodeProgress } = useWatchHistory();
+  const { getEpisodeProgress, updateProgress } = useWatchHistory();
+
+  const handleToggleWatched = (e: React.MouseEvent, episodeNum: number, currentWatched: boolean) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (currentWatched) {
+      updateProgress(Number(tvId), 'tv', 0, 0, selectedSeason, episodeNum, false);
+    } else {
+      updateProgress(Number(tvId), 'tv', 999999, 999999, selectedSeason, episodeNum, true);
+    }
+  };
 
   // Filter out Season 0 (Specials) if preferred, or keep if valid
   const validSeasons = (seasons || []).filter((s) => s.season_number > 0);
@@ -171,11 +181,20 @@ export default function EpisodePicker({
                     </span>
                   )}
 
-                  {!isPlaying && isWatched && (
-                    <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold flex items-center gap-1 font-mono">
-                      <CheckCircle2 className="w-3 h-3" />
-                      <span>Watched</span>
-                    </span>
+                  {!isPlaying && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleWatched(e, ep.episode_number, isWatched)}
+                      className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 font-mono transition-all z-20 cursor-pointer ${
+                        isWatched
+                          ? 'bg-emerald-950/90 border border-emerald-500/40 text-emerald-400 hover:bg-red-950/80 hover:text-red-400 hover:border-red-500/40'
+                          : 'bg-zinc-950/80 border border-zinc-700/60 text-zinc-400 opacity-0 group-hover:opacity-100 hover:text-white hover:bg-zinc-800'
+                      }`}
+                      title={isWatched ? 'Mark as unwatched' : 'Mark as watched'}
+                    >
+                      <CheckCircle2 className={`w-3 h-3 ${isWatched ? 'fill-emerald-400/20' : ''}`} />
+                      <span>{isWatched ? 'Watched' : 'Mark'}</span>
+                    </button>
                   )}
 
                   {/* Playback Progress Bar */}

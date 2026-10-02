@@ -764,11 +764,13 @@ export default function WatchPage() {
 
         {/* Similar Titles Shelf */}
         {similar.length > 0 && (
-          <MediaRow
-            title="You May Also Like"
-            items={similar}
-            onOpenDetails={(item) => setModalItem(item)}
-          />
+          <div id="similar-titles-shelf">
+            <MediaRow
+              title="You May Also Like"
+              items={similar}
+              onOpenDetails={(item) => setModalItem(item)}
+            />
+          </div>
         )}
         </div>
       </div>

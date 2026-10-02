@@ -14,11 +14,18 @@ import {
   Check,
   Zap,
   Layers,
+  FastForward,
+  Trophy,
+  ChevronRight,
 } from 'lucide-react';
 import { STREAM_SERVERS, type StreamServer } from '../services/providers';
 import { directStreamService, type DirectStreamResult } from '../services/directStreamService';
 import NativePlayer from './NativePlayer';
-import { PREVIEW_THRESHOLD_SECONDS } from '../utils/historyHelpers';
+import {
+  PREVIEW_THRESHOLD_SECONDS,
+  isPlaybackCompleted,
+  getEffectiveResumePosition,
+} from '../utils/historyHelpers';
 
 interface VideoPlayerProps {
   tmdbId: number | string;
@@ -67,6 +74,16 @@ export default function VideoPlayer({
   const [activeStartAt, setActiveStartAt] = useState<number>(startAt);
   const [showResumeToast, setShowResumeToast] = useState<boolean>(false);
   const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null);
+  const [showSkipOutro, setShowSkipOutro] = useState<boolean>(false);
+  const [showSeriesFinaleOverlay, setShowSeriesFinaleOverlay] = useState<boolean>(false);
+  const [manualWatchedSuccess, setManualWatchedSuccess] = useState<boolean>(false);
+  const [isAutoPlayEnabled, setIsAutoPlayEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('watch_autoplay_next') !== 'false';
+    } catch {
+      return true;
+    }
+  });
   const [directStreamData, setDirectStreamData] = useState<DirectStreamResult | null>(null);
   const [nativeScrapeFailed, setNativeScrapeFailed] = useState<boolean>(false);
   const [isServerAccordionOpen, setIsServerAccordionOpen] = useState<boolean>(false);
@@ -75,11 +92,49 @@ export default function VideoPlayer({
   const countdownTimerRef = useRef<any>(null);
   const hasTriggeredNextRef = useRef<boolean>(false);
   const lastDurationRef = useRef<number>(0);
+  const lastCurrentTimeRef = useRef<number>(startAt || 0);
+  const isAutoPlayEnabledRef = useRef<boolean>(isAutoPlayEnabled);
+  isAutoPlayEnabledRef.current = isAutoPlayEnabled;
   const startAtRef = useRef<number>(startAt);
   startAtRef.current = startAt;
 
   // Track the media identity so we ONLY reload when the media or server actually changes
   const prevMediaKeyRef = useRef<string>('');
+
+  // Flush exact progress to localStorage on window unload / pagehide (Feature 2)
+  useEffect(() => {
+    const handleUnloadFlush = () => {
+      const curTime = lastCurrentTimeRef.current;
+      const dur = lastDurationRef.current;
+      if (curTime > PREVIEW_THRESHOLD_SECONDS) {
+        const epKey = `watch_progress_${type}_${tmdbId}_${season || 1}_${episode || 1}`;
+        const isFinished = isPlaybackCompleted(curTime, dur, type);
+        const resumeProgress = getEffectiveResumePosition(curTime, dur, type, isFinished);
+        try {
+          localStorage.setItem(
+            epKey,
+            JSON.stringify({
+              progress: Math.floor(curTime),
+              duration: Math.floor(dur),
+              completed: isFinished,
+              resumeProgress,
+              updatedAt: Date.now(),
+            })
+          );
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleUnloadFlush);
+    window.addEventListener('pagehide', handleUnloadFlush);
+    return () => {
+      handleUnloadFlush();
+      window.removeEventListener('beforeunload', handleUnloadFlush);
+      window.removeEventListener('pagehide', handleUnloadFlush);
+    };
+  }, [tmdbId, type, season, episode]);
 
   useEffect(() => {
     const currentMediaKey = `${tmdbId}_${type}_${season}_${episode}_${currentServer.id}`;
@@ -89,13 +144,16 @@ export default function VideoPlayer({
       prevMediaKeyRef.current = currentMediaKey;
       setIsLoading(true);
       setNativeScrapeFailed(false);
+      setShowSkipOutro(false);
+      setShowSeriesFinaleOverlay(false);
+      setManualWatchedSuccess(false);
 
-      // Only resume if beyond 3-minute preview threshold (180s)
       const initialTime =
         startAtRef.current && startAtRef.current > PREVIEW_THRESHOLD_SECONDS
           ? startAtRef.current
           : 0;
       setActiveStartAt(initialTime);
+      lastCurrentTimeRef.current = initialTime;
       setIframeKey((prev) => prev + 1);
       hasTriggeredNextRef.current = false;
       setAutoPlayCountdown(null);
@@ -187,22 +245,33 @@ export default function VideoPlayer({
           if (typeof currentTime === 'number') {
             const validDur = duration || lastDurationRef.current || 0;
             if (duration && duration > 0) lastDurationRef.current = duration;
+            lastCurrentTimeRef.current = currentTime;
 
-            // Only trigger auto next episode when the episode is strictly 100% complete
+            // Feature 1: Skip Outro pill button during final 2 minutes before ending
+            const inOutroRange =
+              validDur > 90 &&
+              currentTime >= validDur - 120 &&
+              currentTime < validDur - 2 &&
+              Boolean(nextEpisodeInfoRef.current);
+            setShowSkipOutro(inOutroRange);
+
+            // Strictly 100% complete: either explicit ended event or within 2 seconds of the end
             const is100PercentComplete =
               eventType === 'ended' || (validDur > 10 && currentTime >= validDur - 2);
 
             onProgressUpdateRef.current?.(currentTime, validDur, is100PercentComplete);
 
-            if (
-              is100PercentComplete &&
-              !hasTriggeredNextRef.current &&
-              nextEpisodeInfoRef.current &&
-              onPlayNextEpisodeRef.current
-            ) {
+            if (is100PercentComplete && !hasTriggeredNextRef.current) {
               hasTriggeredNextRef.current = true;
+              setShowSkipOutro(false);
               onEndedRef.current?.();
-              startAutoPlayCountdown();
+
+              if (nextEpisodeInfoRef.current && onPlayNextEpisodeRef.current) {
+                startAutoPlayCountdown();
+              } else if (type === 'tv') {
+                // Feature 4: Series Finale reached
+                setShowSeriesFinaleOverlay(true);
+              }
             }
           }
         }
@@ -213,7 +282,29 @@ export default function VideoPlayer({
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  const toggleAutoPlayPreference = () => {
+    setIsAutoPlayEnabled((prev) => {
+      const nextVal = !prev;
+      isAutoPlayEnabledRef.current = nextVal;
+      try {
+        localStorage.setItem('watch_autoplay_next', String(nextVal));
+      } catch {
+        // ignore
+      }
+      if (!nextVal && countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+      }
+      return nextVal;
+    });
+  };
+
   const startAutoPlayCountdown = () => {
+    if (!isAutoPlayEnabledRef.current) {
+      // Auto-play disabled: show Up Next card waiting for manual start
+      setAutoPlayCountdown(0);
+      return;
+    }
+
     setAutoPlayCountdown(6);
     if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
 
@@ -237,37 +328,73 @@ export default function VideoPlayer({
   // Handlers for NativePlayer
   const handleNativeProgress = (currentTime: number, duration: number) => {
     if (duration > 0) lastDurationRef.current = duration;
+    lastCurrentTimeRef.current = currentTime;
+
+    // Feature 1: Skip Outro pill button during final 2 minutes before ending
+    const inOutroRange =
+      duration > 90 &&
+      currentTime >= duration - 120 &&
+      currentTime < duration - 2 &&
+      Boolean(nextEpisodeInfoRef.current);
+    setShowSkipOutro(inOutroRange);
 
     // Trigger auto next episode strictly when 100% complete (last 2 seconds)
     const is100PercentComplete = duration > 10 && currentTime >= duration - 2;
     onProgressUpdateRef.current?.(currentTime, duration, is100PercentComplete);
 
-    if (
-      is100PercentComplete &&
-      !hasTriggeredNextRef.current &&
-      nextEpisodeInfoRef.current &&
-      onPlayNextEpisodeRef.current
-    ) {
+    if (is100PercentComplete && !hasTriggeredNextRef.current) {
       hasTriggeredNextRef.current = true;
+      setShowSkipOutro(false);
       onEndedRef.current?.();
-      startAutoPlayCountdown();
+
+      if (nextEpisodeInfoRef.current && onPlayNextEpisodeRef.current) {
+        startAutoPlayCountdown();
+      } else if (type === 'tv') {
+        setShowSeriesFinaleOverlay(true);
+      }
     }
   };
 
   const handleNativeEnded = () => {
     const dur = lastDurationRef.current || 1000;
     onProgressUpdateRef.current?.(dur, dur, true);
+    setShowSkipOutro(false);
 
-    if (
-      !hasTriggeredNextRef.current &&
-      nextEpisodeInfoRef.current &&
-      onPlayNextEpisodeRef.current
-    ) {
+    if (!hasTriggeredNextRef.current) {
       hasTriggeredNextRef.current = true;
       onEndedRef.current?.();
-      startAutoPlayCountdown();
+
+      if (nextEpisodeInfoRef.current && onPlayNextEpisodeRef.current) {
+        startAutoPlayCountdown();
+      } else if (type === 'tv') {
+        setShowSeriesFinaleOverlay(true);
+      }
     }
   };
+
+  const handleSkipOutro = () => {
+    setShowSkipOutro(false);
+    const dur = lastDurationRef.current || 1000;
+    onProgressUpdateRef.current?.(dur, dur, true);
+    if (onPlayNextEpisodeRef.current) {
+      onPlayNextEpisodeRef.current();
+    }
+  };
+
+  const handleManualMarkWatched = () => {
+    onProgressUpdateRef.current?.(999999, 999999, true);
+    setManualWatchedSuccess(true);
+    setTimeout(() => setManualWatchedSuccess(false), 3000);
+  };
+
+  const handleManualNextEpisode = () => {
+    onProgressUpdateRef.current?.(999999, 999999, true);
+    if (onPlayNextEpisodeRef.current) {
+      onPlayNextEpisodeRef.current();
+    }
+  };
+
+  const isEmbedServer = !currentServer.isNativeHls && currentServer.id !== 'vidlink';
 
   const handleSwitchToBackup = () => {
     setCurrentServer(STREAM_SERVERS[1]); // Fallback to Server 2 (VidLink)
@@ -366,6 +493,76 @@ export default function VideoPlayer({
           </div>
         )}
 
+        {/* Feature 1: Skip Outro Pill Button during Rolling Credits */}
+        {showSkipOutro && nextEpisodeInfo && autoPlayCountdown === null && !showSeriesFinaleOverlay && (
+          <button
+            type="button"
+            onClick={handleSkipOutro}
+            className="absolute bottom-6 right-6 z-40 px-4 py-2.5 rounded-full bg-zinc-950/90 hover:bg-red-600 text-white border border-red-500/50 hover:border-red-500 backdrop-blur-md shadow-2xl flex items-center gap-2 text-xs font-bold transition-all duration-300 transform hover:scale-105 cursor-pointer animate-in fade-in slide-in-from-bottom-2 group"
+            title="Skip Outro / Play Next Episode"
+          >
+            <FastForward className="w-4 h-4 text-red-400 group-hover:text-white transition-colors" />
+            <span>Next Episode</span>
+            <span className="text-[10px] text-zinc-400 group-hover:text-red-100 font-mono">
+              (S{nextEpisodeInfo.season}:E{nextEpisodeInfo.episode})
+            </span>
+            <ChevronRight className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white" />
+          </button>
+        )}
+
+        {/* Feature 4: Series Finale Celebration Card */}
+        {showSeriesFinaleOverlay && (
+          <div className="absolute inset-0 z-40 bg-zinc-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-red-600 flex items-center justify-center text-white shadow-2xl shadow-red-950/50 mb-3 animate-bounce">
+              <Trophy className="w-8 h-8 fill-current" />
+            </div>
+            <span className="px-3 py-1 rounded-full text-[11px] font-mono font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30 mb-2">
+              Series Completed!
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-white">
+              You've finished watching {title}!
+            </h2>
+            <p className="text-xs sm:text-sm text-zinc-400 max-w-md mt-1.5 mb-6">
+              Congratulations on completing all seasons and episodes. Check out similar trending shows below or rewatch anytime.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSeriesFinaleOverlay(false);
+                  window.location.href = `/watch/tv/${tmdbId}/1/1`;
+                }}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-red-600/30 transition cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Rewatch From S1:E1</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSeriesFinaleOverlay(false);
+                  const similarShelf = document.getElementById('similar-titles-shelf');
+                  if (similarShelf) {
+                    similarShelf.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs flex items-center gap-2 border border-zinc-700 transition cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>Explore Similar Shows</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSeriesFinaleOverlay(false)}
+                className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Auto Next Episode Countdown Overlay */}
         {autoPlayCountdown !== null && nextEpisodeInfo && (
           <div className="absolute bottom-6 right-6 z-40 bg-zinc-950/95 border border-red-600/50 backdrop-blur-md p-4 rounded-2xl shadow-2xl max-w-xs space-y-3 animate-in slide-in-from-bottom-4 duration-300">
@@ -388,7 +585,13 @@ export default function VideoPlayer({
                   : `Season ${nextEpisodeInfo.season} • Episode ${nextEpisodeInfo.episode}`}
               </p>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Playing automatically in <strong className="text-red-400 font-mono text-sm">{autoPlayCountdown}s</strong>...
+                {autoPlayCountdown > 0 ? (
+                  <>
+                    Playing automatically in <strong className="text-red-400 font-mono text-sm">{autoPlayCountdown}s</strong>...
+                  </>
+                ) : (
+                  'Ready to play when you are'
+                )}
               </p>
             </div>
             <div className="flex items-center gap-2 pt-1">
@@ -407,6 +610,25 @@ export default function VideoPlayer({
                 className="py-1.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition cursor-pointer"
               >
                 Cancel
+              </button>
+            </div>
+
+            {/* Feature 5: Auto-Play Next Episode Preference Switch */}
+            <div className="flex items-center justify-between border-t border-zinc-800/80 pt-2 text-[11px] text-zinc-400 select-none">
+              <span>Auto-play next episode</span>
+              <button
+                type="button"
+                onClick={toggleAutoPlayPreference}
+                className={`w-8 h-4 rounded-full transition-colors relative cursor-pointer ${
+                  isAutoPlayEnabled ? 'bg-red-600' : 'bg-zinc-700'
+                }`}
+                title={isAutoPlayEnabled ? 'Auto-play is ON (click to disable)' : 'Auto-play is OFF (click to enable)'}
+              >
+                <span
+                  className={`w-3 h-3 rounded-full bg-white absolute top-0.5 transition-all ${
+                    isAutoPlayEnabled ? 'left-4.5' : 'left-0.5'
+                  }`}
+                />
               </button>
             </div>
           </div>
@@ -534,7 +756,37 @@ export default function VideoPlayer({
             </button>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+            {/* Feature 3: Manual helper controls for Embed servers without postMessage (Server 3-6) */}
+            {isEmbedServer && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleManualMarkWatched}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                    manualWatchedSuccess
+                      ? 'bg-emerald-950/80 text-emerald-400 border-emerald-500/60 ring-1 ring-emerald-500/40'
+                      : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border-zinc-700/60'
+                  }`}
+                  title="Manually mark episode as watched"
+                >
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{manualWatchedSuccess ? 'Marked Watched!' : 'Mark Watched'}</span>
+                </button>
+                {type === 'tv' && nextEpisodeInfo && (
+                  <button
+                    type="button"
+                    onClick={handleManualNextEpisode}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white transition cursor-pointer shadow-md shadow-red-600/30"
+                    title="Mark finished & play next episode"
+                  >
+                    <FastForward className="w-3.5 h-3.5 fill-white" />
+                    <span>Next Ep</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             <button
               onClick={handleReload}
               className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-medium flex items-center gap-1.5 transition border border-zinc-700/60 cursor-pointer"
