@@ -178,16 +178,25 @@ export default function WatchPage() {
         const maxEpisodes = currSeasonObj?.episode_count || 1;
 
         if (currEpNum < maxEpisodes) {
-          navigate(`/watch/tv/${id}/${currSeasonNum}/${currEpNum + 1}`, { replace: true });
+          navigate(`/watch/tv/${id}/${currSeasonNum}/${currEpNum + 1}`, {
+            replace: true,
+            state: { forceStartAtZero: true },
+          });
         } else {
           // Season finale complete - advance to next season if available
           const nextSeasonNum = currSeasonNum + 1;
           const nextSeasonObj = validSeasons.find((s) => s.season_number === nextSeasonNum);
           if (nextSeasonObj && nextSeasonObj.episode_count > 0) {
-            navigate(`/watch/tv/${id}/${nextSeasonNum}/1`, { replace: true });
+            navigate(`/watch/tv/${id}/${nextSeasonNum}/1`, {
+              replace: true,
+              state: { forceStartAtZero: true },
+            });
           } else {
             // Entire series complete - rewatch from beginning
-            navigate(`/watch/tv/${id}/1/1`, { replace: true });
+            navigate(`/watch/tv/${id}/1/1`, {
+              replace: true,
+              state: { forceStartAtZero: true },
+            });
           }
         }
       }
@@ -324,26 +333,60 @@ export default function WatchPage() {
   });
 
   const handlePrevEpisode = () => {
+    let targetSeason = currentSeason;
+    let targetEpisode = currentEpisode - 1;
+
     if (currentEpisode > 1) {
-      navigate(`/watch/tv/${id}/${currentSeason}/${currentEpisode - 1}`);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      targetEpisode = currentEpisode - 1;
     } else if (currentSeason > 1 && details?.seasons) {
-      const prevSeasonNum = currentSeason - 1;
-      const prevSeasonObj = details.seasons.find((s) => s.season_number === prevSeasonNum);
-      const prevMaxEp = prevSeasonObj?.episode_count || 1;
-      navigate(`/watch/tv/${id}/${prevSeasonNum}/${prevMaxEp}`);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      targetSeason = currentSeason - 1;
+      const prevSeasonObj = details.seasons.find((s) => s.season_number === targetSeason);
+      targetEpisode = prevSeasonObj?.episode_count || 1;
+    } else {
+      return;
     }
+
+    try {
+      const targetEpKey = `watch_progress_tv_${id}_${targetSeason}_${targetEpisode}`;
+      const existingRaw = localStorage.getItem(targetEpKey);
+      if (existingRaw) {
+        const existing = JSON.parse(existingRaw);
+        if (!existing.completed) {
+          localStorage.removeItem(targetEpKey);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    navigate(`/watch/tv/${id}/${targetSeason}/${targetEpisode}`, {
+      state: { forceStartAtZero: true },
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNextEpisode = () => {
-    if (nextEpisodeInfo) {
-      navigate(`/watch/tv/${id}/${nextEpisodeInfo.season}/${nextEpisodeInfo.episode}`);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      navigate(`/watch/tv/${id}/${currentSeason}/${currentEpisode + 1}`);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    const targetSeason = nextEpisodeInfo ? nextEpisodeInfo.season : currentSeason;
+    const targetEpisode = nextEpisodeInfo ? nextEpisodeInfo.episode : currentEpisode + 1;
+
+    // Clear any tainted progress for target episode that may have bled over from previous episode
+    try {
+      const targetEpKey = `watch_progress_tv_${id}_${targetSeason}_${targetEpisode}`;
+      const existingRaw = localStorage.getItem(targetEpKey);
+      if (existingRaw) {
+        const existing = JSON.parse(existingRaw);
+        if (!existing.completed) {
+          localStorage.removeItem(targetEpKey);
+        }
+      }
+    } catch {
+      // ignore
     }
+
+    navigate(`/watch/tv/${id}/${targetSeason}/${targetEpisode}`, {
+      state: { forceStartAtZero: true },
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleShare = async () => {
@@ -374,8 +417,19 @@ export default function WatchPage() {
 
   // Get initial start time for playback - computed ONLY when the media/episode changes
   const initialStartAt = useMemo(() => {
-    // Check if navigated back via miniplayer expand with exact timestamp
-    if (location.state && typeof location.state === 'object' && 'resumeAt' in location.state) {
+    // If navigation explicitly forced start at 0 (e.g. Next Episode, Prev Episode, auto-advance)
+    if (location.state && typeof location.state === 'object' && (location.state as any).forceStartAtZero) {
+      return 0;
+    }
+
+    // Check if navigated back via miniplayer expand with exact timestamp for THIS specific episode
+    if (
+      location.state &&
+      typeof location.state === 'object' &&
+      'resumeAt' in location.state &&
+      (!('targetSeason' in location.state) || (location.state as any).targetSeason === currentSeason) &&
+      (!('targetEpisode' in location.state) || (location.state as any).targetEpisode === currentEpisode)
+    ) {
       const resumeTime = Number((location.state as any).resumeAt);
       if (resumeTime > 0) return resumeTime;
     }
@@ -386,6 +440,10 @@ export default function WatchPage() {
       mediaType === 'tv' ? currentSeason : 1,
       mediaType === 'tv' ? currentEpisode : 1
     );
+
+    // If marked completed, replay from beginning (0)
+    if (saved?.completed) return 0;
+
     return saved?.resumeProgress ?? (saved?.progress && saved.progress > PREVIEW_THRESHOLD_SECONDS ? saved.progress : 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, mediaType, currentSeason, currentEpisode, location.state]);
@@ -442,6 +500,7 @@ export default function WatchPage() {
         {/* Video Player */}
         <div ref={playerContainerRef} className="w-full">
           <VideoPlayer
+            key={`video-player-${mediaType}-${id}-${currentSeason}-${currentEpisode}`}
             tmdbId={id}
             type={mediaType}
             season={currentSeason}

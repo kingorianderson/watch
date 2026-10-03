@@ -67,7 +67,18 @@ export default function EpisodePicker({
   }, [tvId, selectedSeason]);
 
   const handleEpisodeSelect = (epNum: number) => {
-    navigate(`/watch/tv/${tvId}/${selectedSeason}/${epNum}`);
+    const progressInfo = getEpisodeProgress(Number(tvId), 'tv', selectedSeason, epNum);
+    const isCompleted = isPlaybackCompleted(
+      progressInfo?.progress,
+      progressInfo?.duration,
+      'tv',
+      progressInfo?.completed
+    );
+    const hasProgress = !isCompleted && progressInfo?.progress && progressInfo.progress > 30;
+
+    navigate(`/watch/tv/${tvId}/${selectedSeason}/${epNum}`, {
+      state: hasProgress ? undefined : { forceStartAtZero: true },
+    });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 

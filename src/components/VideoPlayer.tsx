@@ -68,10 +68,21 @@ export default function VideoPlayer({
   onPlayNextEpisode,
   isCinemaMode = false,
 }: VideoPlayerProps) {
-  const [currentServer, setCurrentServer] = useState<StreamServer>(STREAM_SERVERS[0]);
+  const [currentServer, setCurrentServer] = useState<StreamServer>(() => {
+    try {
+      const savedId = localStorage.getItem('watch_preferred_server_id');
+      if (savedId) {
+        const found = STREAM_SERVERS.find((s) => s.id === savedId);
+        if (found) return found;
+      }
+    } catch {
+      // ignore
+    }
+    return STREAM_SERVERS[0];
+  });
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeStartAt, setActiveStartAt] = useState<number>(startAt);
+  const [manualOverrideStartAt, setManualOverrideStartAt] = useState<number | null>(null);
   const [showResumeToast, setShowResumeToast] = useState<boolean>(false);
   const [autoPlayCountdown, setAutoPlayCountdown] = useState<number | null>(null);
   const [showSkipOutro, setShowSkipOutro] = useState<boolean>(false);
@@ -92,24 +103,61 @@ export default function VideoPlayer({
   const countdownTimerRef = useRef<any>(null);
   const hasTriggeredNextRef = useRef<boolean>(false);
   const lastDurationRef = useRef<number>(0);
-  const lastCurrentTimeRef = useRef<number>(startAt || 0);
+
+  // Synchronously compute effective start time for this exact render pass
+  const currentMediaKey = `${tmdbId}_${type}_${season}_${episode}`;
+  const prevMediaKeyRef = useRef<string>(currentMediaKey);
+  const mountedTimestampRef = useRef<number>(Date.now());
+
+  // Synchronously detect media change during render pass
+  if (prevMediaKeyRef.current !== currentMediaKey) {
+    prevMediaKeyRef.current = currentMediaKey;
+    mountedTimestampRef.current = Date.now();
+    if (manualOverrideStartAt !== null) {
+      setManualOverrideStartAt(null);
+    }
+  }
+
+  const effectiveStartAt =
+    manualOverrideStartAt !== null
+      ? manualOverrideStartAt
+      : (startAt && startAt > PREVIEW_THRESHOLD_SECONDS ? Math.floor(startAt) : 0);
+
+  const lastCurrentTimeRef = useRef<number>(effectiveStartAt);
   const isAutoPlayEnabledRef = useRef<boolean>(isAutoPlayEnabled);
   isAutoPlayEnabledRef.current = isAutoPlayEnabled;
-  const startAtRef = useRef<number>(startAt);
-  startAtRef.current = startAt;
 
-  // Track the media identity so we ONLY reload when the media or server actually changes
-  const prevMediaKeyRef = useRef<string>('');
+  const setAndPersistServer = (server: StreamServer) => {
+    setCurrentServer(server);
+    try {
+      localStorage.setItem('watch_preferred_server_id', server.id);
+    } catch {}
+  };
+
+  // Track episode identity for safe unload flush
+  const currentIdentityRef = useRef({
+    tmdbId,
+    type,
+    season: season || 1,
+    episode: episode || 1,
+  });
+  currentIdentityRef.current = {
+    tmdbId,
+    type,
+    season: season || 1,
+    episode: episode || 1,
+  };
 
   // Flush exact progress to localStorage on window unload / pagehide (Feature 2)
   useEffect(() => {
     const handleUnloadFlush = () => {
       const curTime = lastCurrentTimeRef.current;
       const dur = lastDurationRef.current;
+      const ident = currentIdentityRef.current;
       if (curTime > PREVIEW_THRESHOLD_SECONDS) {
-        const epKey = `watch_progress_${type}_${tmdbId}_${season || 1}_${episode || 1}`;
-        const isFinished = isPlaybackCompleted(curTime, dur, type);
-        const resumeProgress = getEffectiveResumePosition(curTime, dur, type, isFinished);
+        const epKey = `watch_progress_${ident.type}_${ident.tmdbId}_${ident.season}_${ident.episode}`;
+        const isFinished = isPlaybackCompleted(curTime, dur, ident.type);
+        const resumeProgress = getEffectiveResumePosition(curTime, dur, ident.type, isFinished);
         try {
           localStorage.setItem(
             epKey,
@@ -134,32 +182,29 @@ export default function VideoPlayer({
       window.removeEventListener('beforeunload', handleUnloadFlush);
       window.removeEventListener('pagehide', handleUnloadFlush);
     };
-  }, [tmdbId, type, season, episode]);
+  }, []);
+
+  const activeEffectKeyRef = useRef<string>('');
 
   useEffect(() => {
-    const currentMediaKey = `${tmdbId}_${type}_${season}_${episode}_${currentServer.id}`;
+    const fullMediaKey = `${tmdbId}_${type}_${season}_${episode}_${currentServer.id}`;
 
     // Only reload when media or server truly changes
-    if (prevMediaKeyRef.current !== currentMediaKey) {
-      prevMediaKeyRef.current = currentMediaKey;
+    if (activeEffectKeyRef.current !== fullMediaKey) {
+      activeEffectKeyRef.current = fullMediaKey;
       setIsLoading(true);
       setNativeScrapeFailed(false);
       setShowSkipOutro(false);
       setShowSeriesFinaleOverlay(false);
       setManualWatchedSuccess(false);
 
-      const initialTime =
-        startAtRef.current && startAtRef.current > PREVIEW_THRESHOLD_SECONDS
-          ? startAtRef.current
-          : 0;
-      setActiveStartAt(initialTime);
-      lastCurrentTimeRef.current = initialTime;
+      lastCurrentTimeRef.current = effectiveStartAt;
       setIframeKey((prev) => prev + 1);
       hasTriggeredNextRef.current = false;
       setAutoPlayCountdown(null);
       if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
 
-      if (initialTime > PREVIEW_THRESHOLD_SECONDS) {
+      if (effectiveStartAt > PREVIEW_THRESHOLD_SECONDS) {
         setShowResumeToast(true);
         const timer = setTimeout(() => setShowResumeToast(false), 7000);
         return () => clearTimeout(timer);
@@ -167,7 +212,7 @@ export default function VideoPlayer({
         setShowResumeToast(false);
       }
     }
-  }, [tmdbId, type, season, episode, currentServer]);
+  }, [tmdbId, type, season, episode, currentServer.id, effectiveStartAt]);
 
   // Resolve direct HLS stream metadata when Server 1 is active
   useEffect(() => {
@@ -193,7 +238,7 @@ export default function VideoPlayer({
               // Seamless Auto-Transition from Tier 1/2 to Tier 3 (Server 2: VidLink)
               setDirectStreamData(null);
               setNativeScrapeFailed(false);
-              setCurrentServer(STREAM_SERVERS[1]);
+              setAndPersistServer(STREAM_SERVERS[1]);
               setIsLoading(false);
               setAutoSwitchToast({
                 message: '⚡ Auto-switched to Server 2 (VidLink) for HD streaming',
@@ -206,7 +251,7 @@ export default function VideoPlayer({
           if (isMounted) {
             setDirectStreamData(null);
             setNativeScrapeFailed(false);
-            setCurrentServer(STREAM_SERVERS[1]);
+            setAndPersistServer(STREAM_SERVERS[1]);
             setIsLoading(false);
             setAutoSwitchToast({
               message: '⚡ Auto-switched to Server 2 (VidLink) for HD streaming',
@@ -243,6 +288,17 @@ export default function VideoPlayer({
           const { event: eventType, currentTime, duration } = data.data;
 
           if (typeof currentTime === 'number') {
+            // Guard against stale postMessages from previous episode iframe during transition:
+            // If the episode is supposed to start at 0, and within 2.5s of switching/mounting
+            // an incoming message reports currentTime > 10s, it's a ghost packet from the old episode!
+            if (
+              effectiveStartAt === 0 &&
+              Date.now() - mountedTimestampRef.current < 2500 &&
+              currentTime > 10
+            ) {
+              return;
+            }
+
             const validDur = duration || lastDurationRef.current || 0;
             if (duration && duration > 0) lastDurationRef.current = duration;
             lastCurrentTimeRef.current = currentTime;
@@ -397,17 +453,17 @@ export default function VideoPlayer({
   const isEmbedServer = !currentServer.isNativeHls && currentServer.id !== 'vidlink';
 
   const handleSwitchToBackup = () => {
-    setCurrentServer(STREAM_SERVERS[1]); // Fallback to Server 2 (VidLink)
+    setAndPersistServer(STREAM_SERVERS[1]); // Fallback to Server 2 (VidLink)
   };
 
   const streamUrl =
     type === 'movie'
-      ? currentServer.getMovieUrl(tmdbId, activeStartAt)
-      : currentServer.getTvUrl(tmdbId, season, episode, activeStartAt);
+      ? currentServer.getMovieUrl(tmdbId, effectiveStartAt)
+      : currentServer.getTvUrl(tmdbId, season, episode, effectiveStartAt);
 
   const handleServerChange = (server: StreamServer) => {
     if (server.id !== currentServer.id) {
-      setCurrentServer(server);
+      setAndPersistServer(server);
     }
   };
 
@@ -417,7 +473,8 @@ export default function VideoPlayer({
   };
 
   const handleStartOver = () => {
-    setActiveStartAt(0);
+    setManualOverrideStartAt(0);
+    lastCurrentTimeRef.current = 0;
     setShowResumeToast(false);
     setIsLoading(true);
     setIframeKey((prev) => prev + 1);
@@ -471,11 +528,11 @@ export default function VideoPlayer({
           )}
 
         {/* Resumed from timestamp banner toast */}
-        {showResumeToast && activeStartAt > 15 && (
+        {showResumeToast && effectiveStartAt > 15 && (
           <div className="absolute top-4 left-4 z-30 flex items-center gap-2.5 bg-zinc-900/90 border border-emerald-500/40 backdrop-blur-md px-3.5 py-2 rounded-xl text-xs text-white shadow-xl animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             <span>
-              Resumed from <strong className="text-emerald-400 font-mono">{formatTime(activeStartAt)}</strong>
+              Resumed from <strong className="text-emerald-400 font-mono">{formatTime(effectiveStartAt)}</strong>
             </span>
             <button
               onClick={handleStartOver}
@@ -661,7 +718,7 @@ export default function VideoPlayer({
               season={season}
               episode={episode}
               releaseYear={releaseYear}
-              startAt={activeStartAt}
+              startAt={effectiveStartAt}
               onProgressUpdate={handleNativeProgress}
               onEnded={handleNativeEnded}
               onSwitchToBackup={handleSwitchToBackup}

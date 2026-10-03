@@ -174,9 +174,18 @@ export function WatchHistoryProvider({ children }: { children: ReactNode }) {
         const existing = prev.find((i) => i.id === item.id && i.type === item.type);
         const filtered = prev.filter((i) => !(i.id === item.id && i.type === item.type));
 
+        // If switching episodes for a TV show, don't let previous episode's progress bleed over!
+        const isDifferentEpisode =
+          item.type === 'tv' &&
+          existing &&
+          (item.season !== existing.season || item.episode !== existing.episode);
+
         const newItem: WatchHistoryItem = {
           ...existing,
           ...item,
+          progress: isDifferentEpisode ? (item.progress ?? 0) : (item.progress ?? existing?.progress ?? 0),
+          duration: isDifferentEpisode ? (item.duration ?? 0) : (item.duration ?? existing?.duration ?? 0),
+          completed: isDifferentEpisode ? (item.completed ?? false) : (item.completed ?? existing?.completed ?? false),
           timestamp: Date.now(),
         };
 
