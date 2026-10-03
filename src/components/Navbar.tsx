@@ -265,10 +265,10 @@ export default function Navbar() {
   };
 
   const navLinks = [
-    { name: 'Movies', path: '/movies', icon: Film },
-    { name: 'Shows', path: '/series', icon: Tv },
-    { name: 'Watchlist', path: '/watchlist', icon: Bookmark, count: watchlist.length },
-    { name: 'Live Sports', path: '/sports', icon: Trophy, isLive: true },
+    { name: 'Movies', shortName: 'Movies', path: '/movies', icon: Film },
+    { name: 'Shows', shortName: 'Shows', path: '/series', icon: Tv },
+    { name: 'Watchlist', shortName: 'Watchlist', path: '/watchlist', icon: Bookmark, count: watchlist.length },
+    { name: 'Live Sports', shortName: 'Sports', path: '/sports', icon: Trophy, isLive: true },
   ];
 
   const isNavHidden =
@@ -282,7 +282,7 @@ export default function Navbar() {
   return (
     <>
       <header
-        className={`fixed top-3 sm:top-5 inset-x-0 z-40 px-3 sm:px-6 lg:px-8 flex flex-col items-center pointer-events-none transition-all duration-500 ease-in-out ${
+        className={`fixed top-3 sm:top-5 inset-x-0 z-40 px-3 sm:px-4 md:px-6 lg:px-8 flex flex-col items-center pointer-events-none transition-all duration-500 ease-in-out ${
           isNavHidden
             ? '-translate-y-28 opacity-0 pointer-events-none'
             : 'translate-y-0 opacity-100'
@@ -291,30 +291,30 @@ export default function Navbar() {
         <nav
           className={`pointer-events-auto w-full max-w-[1550px] rounded-full transition-all duration-300 border shadow-2xl ${
             isScrolled
-              ? 'bg-zinc-950/85 backdrop-blur-2xl border-white/20 shadow-black/90 ring-1 ring-white/10 py-2 sm:py-2.5 pl-4 sm:pl-6 pr-6 sm:pr-8'
-              : 'bg-black/45 backdrop-blur-2xl border-white/15 shadow-black/70 ring-1 ring-white/10 py-2 sm:py-2.5 pl-4 sm:pl-6 pr-6 sm:pr-8'
-          } flex items-center justify-between gap-3 sm:gap-6`}
+              ? 'bg-zinc-950/85 backdrop-blur-2xl border-white/20 shadow-black/90 ring-1 ring-white/10 py-1.5 sm:py-2 px-3 sm:px-4 md:px-5 lg:px-6'
+              : 'bg-black/45 backdrop-blur-2xl border-white/15 shadow-black/70 ring-1 ring-white/10 py-1.5 sm:py-2 px-3 sm:px-4 md:px-5 lg:px-6'
+          } flex items-center justify-between gap-2 sm:gap-3 lg:gap-6`}
         >
           {/* Brand Logo */}
-          <div className="flex items-center gap-4 sm:gap-6 lg:gap-8">
-            <Link to="/" className="flex items-center gap-2.5 group shrink-0 pl-1">
+          <div className="flex items-center gap-2 sm:gap-3 md:gap-4 lg:gap-6 min-w-0">
+            <Link to="/" className="flex items-center gap-2 group shrink-0 pl-1">
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-tr from-red-600 via-red-500 to-amber-500 flex items-center justify-center shadow-md shadow-red-600/30 group-hover:scale-105 transition duration-200">
                 <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white fill-white ml-0.5" />
               </div>
-              <span className="text-lg sm:text-xl font-black tracking-tight text-white drop-shadow-md flex items-center">
+              <span className="text-base sm:text-lg md:text-xl font-black tracking-tight text-white drop-shadow-md flex items-center">
                 WATC<span className="text-red-500 font-bold ml-0.5">HD</span>
               </span>
             </Link>
 
             {/* Desktop Navigation Links */}
-            <div className="hidden md:flex items-center gap-1.5">
+            <div className="hidden md:flex items-center gap-1 lg:gap-1.5">
               {navLinks.map((link) => {
                 const isActive = location.pathname === link.path;
                 return (
                   <Link
                     key={link.name}
                     to={link.path}
-                    className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-1.5 shrink-0 ${
+                    className={`px-2.5 sm:px-3 lg:px-3.5 xl:px-4 py-1.5 rounded-full text-xs lg:text-sm font-semibold transition-all duration-200 flex items-center gap-1 lg:gap-1.5 shrink-0 ${
                       isActive
                         ? 'bg-white text-zinc-950 font-bold shadow-md scale-[1.02]'
                         : 'text-zinc-300 hover:text-white hover:bg-white/10'
@@ -331,7 +331,8 @@ export default function Navbar() {
                         }`}
                       />
                     )}
-                    <span>{link.name}</span>
+                    <span className="hidden xl:inline">{link.name}</span>
+                    <span className="xl:hidden">{link.shortName || link.name}</span>
                     {link.isLive && (
                       <span className="flex h-2 w-2 relative ml-0.5">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -354,18 +355,18 @@ export default function Navbar() {
           </div>
 
           {/* Desktop Search Bar & User Actions */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 shrink-0">
             {/* Desktop-only Search Bar */}
-            <div className="relative hidden md:block w-36 sm:w-48 lg:w-60" ref={searchRef}>
+            <div className="relative hidden md:block w-32 md:w-36 lg:w-48 xl:w-60 focus-within:w-44 md:focus-within:w-48 lg:focus-within:w-60 transition-all duration-300" ref={searchRef}>
               <form onSubmit={handleSearchSubmit} className="relative">
                 <input
                   ref={desktopInputRef}
                   type="text"
-                  placeholder="Search movies, series, actors..."
+                  placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setShowSearchDropdown(true)}
-                  className="w-full bg-white/10 hover:bg-white/15 focus:bg-zinc-950/90 text-xs sm:text-sm text-white placeholder-zinc-400 pl-8 pr-10 py-1.5 rounded-full border border-white/10 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/20 backdrop-blur-md transition-all shadow-inner"
+                  className="w-full bg-white/10 hover:bg-white/15 focus:bg-zinc-950/90 text-xs sm:text-sm text-white placeholder-zinc-400 pl-8 pr-8 py-1.5 rounded-full border border-white/10 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/20 backdrop-blur-md transition-all shadow-inner"
                 />
 
                 {/* Search Icon or Loading Spinner */}
@@ -539,15 +540,15 @@ export default function Navbar() {
             {/* Desktop Support Button */}
             <button
               onClick={openSupportModal}
-              className="hidden sm:inline-flex px-3 sm:px-3.5 py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-semibold transition hover:scale-105 items-center gap-1.5 cursor-pointer shrink-0 backdrop-blur-md shadow-sm"
+              className="hidden sm:inline-flex px-2.5 lg:px-3.5 py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-semibold transition hover:scale-105 items-center gap-1.5 cursor-pointer shrink-0 backdrop-blur-md shadow-sm"
               title="Support WATCHD with a tip"
             >
-              <Heart className="w-3.5 h-3.5 text-red-400 fill-red-400 animate-pulse" />
-              <span>Support</span>
+              <Heart className="w-3.5 h-3.5 text-red-400 fill-red-400 animate-pulse shrink-0" />
+              <span className="hidden lg:inline">Support</span>
             </button>
 
             {/* Subtle vertical divider */}
-            <div className="h-5 w-px bg-white/15 hidden sm:block" />
+            <div className="h-5 w-px bg-white/15 hidden lg:block" />
 
             {/* Mobile Search Button */}
             <button
